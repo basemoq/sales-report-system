@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { EmployeeSummary } from '../core/model'
 import { DayDetails } from './DayDetails'
 import { formatCount, formatMoney } from './format'
+import { Icon } from './Icon'
 
 interface Props {
   employees: readonly EmployeeSummary[]
@@ -14,7 +15,10 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
   if (employees.length === 0) {
     return (
       <section className="panel">
-        <h2>تقرير الموظفين</h2>
+        <h2>
+          <Icon name="users" />
+          تقرير الموظفين
+        </h2>
         <p className="muted">
           يحتاج تقرير الموظفين إلى ملف CACO المفصّل؛ لم يُرفع في هذه الدفعة.
         </p>
@@ -30,7 +34,10 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
   return (
     <section className="panel" id="employee-report">
       <div className="panel-head">
-        <h2>تقرير الموظفين — {reportDate}</h2>
+        <h2>
+          <Icon name="users" />
+          تقرير الموظفين — {reportDate}
+        </h2>
         <button type="button" className="no-print" onClick={() => window.print()}>
           تنزيل PDF
         </button>

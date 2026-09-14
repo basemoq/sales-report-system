@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReportIdentity } from '../core/dailyReport'
+import { Icon } from './Icon'
 
 interface Props {
   identity: ReportIdentity
@@ -38,7 +39,10 @@ export function IdentityPanel({ identity, onChange, showrooms, supervisors }: Pr
 
   return (
     <section className="panel no-print">
-      <h2>المعرض والمشرف</h2>
+      <h2>
+        <Icon name="store" />
+        المعرض والمشرف
+      </h2>
       <p className="muted">يُكتبان في رأس القالب. اختر من القائمة، أو «أخرى» لكتابة اسم جديد.</p>
 
       <div className="fields">
@@ -84,9 +88,12 @@ export function IdentityPanel({ identity, onChange, showrooms, supervisors }: Pr
       </div>
 
       {missing.length > 0 && (
-        <p className="warn">
-          {`سيخرج التقرير بخانة «${missing.map((field) => field.label).join('» و«')}» فارغة.`}
-        </p>
+        <div className="note warn">
+          <Icon name="warning" />
+          <p>
+            {`سيخرج التقرير بخانة «${missing.map((field) => field.label).join('» و«')}» فارغة.`}
+          </p>
+        </div>
       )}
     </section>
   )

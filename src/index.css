@@ -1,7 +1,14 @@
+@import './fonts.css';
+
 :root {
   color-scheme: light dark;
-  font-family: system-ui, "Segoe UI", Tahoma, sans-serif;
+  /*
+   * Tajawal reads well in Arabic at small sizes and carries a Latin subset, so
+   * the numbers in the tables share the text's rhythm instead of jumping fonts.
+   */
+  font-family: 'Tajawal', system-ui, 'Segoe UI', Tahoma, sans-serif;
   line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {

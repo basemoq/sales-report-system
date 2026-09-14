@@ -1,5 +1,6 @@
 import type { DailyFigures } from '../core/dailyReport'
 import { formatMoney } from './format'
+import { Icon } from './Icon'
 
 interface Props {
   figures: DailyFigures
@@ -28,7 +29,10 @@ export function FiguresPanel({
 
   return (
     <section className="panel" id="figures">
-      <h2>تقرير مبيعات المعارض اليومي — {reportDate}</h2>
+      <h2>
+        <Icon name="report" />
+        تقرير مبيعات المعارض اليومي — {reportDate}
+      </h2>
 
       <div className="table-scroll">
         <table className="data-table">

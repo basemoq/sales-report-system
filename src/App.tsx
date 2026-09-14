@@ -17,6 +17,7 @@ import { EmployeesPanel } from './ui/EmployeesPanel'
 import { FiguresPanel } from './ui/FiguresPanel'
 import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
+import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
 import './App.css'
 
@@ -136,8 +137,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="no-print">
-        <h1>نظام تقارير المبيعات</h1>
+      <header className="masthead no-print">
+        <Icon name="report" />
+        <div>
+          <h1>نظام تقارير المبيعات</h1>
+          <p className="tagline">تقرير مبيعات المعارض اليومي</p>
+        </div>
       </header>
 
       <IdentityPanel
@@ -159,7 +164,10 @@ export default function App() {
           />
 
           <section className="panel no-print">
-            <h2>الإخراج</h2>
+            <h2>
+              <Icon name="download" />
+              الإخراج
+            </h2>
             <div className="actions">
               <button type="button" onClick={fillTemplate}>
                 تعبئة القالب وتنزيله
@@ -167,11 +175,15 @@ export default function App() {
 
               {save.kind === 'confirm-replace' ? (
                 <>
-                  <p className="warn">
-                    يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
-                    {save.existingCreatedAt && ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}.
-                    الاستبدال نهائي ولا يمكن التراجع عنه.
-                  </p>
+                  <div className="note warn">
+                    <Icon name="warning" />
+                    <p>
+                      يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
+                      {save.existingCreatedAt &&
+                        ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
+                      . الاستبدال نهائي ولا يمكن التراجع عنه.
+                    </p>
+                  </div>
                   <button type="button" onClick={() => persist(true)}>
                     تأكيد الاستبدال
                   </button>
@@ -185,20 +197,39 @@ export default function App() {
                 </button>
               )}
 
-              {save.kind === 'saved' && <p className="ok">تم حفظ التقرير.</p>}
-              {save.kind === 'error' && <p className="error">{save.message}</p>}
+              {save.kind === 'saved' && (
+                <div className="note ok">
+                  <Icon name="success" />
+                  <p>تم حفظ التقرير.</p>
+                </div>
+              )}
+              {save.kind === 'error' && (
+                <div className="note error">
+                  <Icon name="error" />
+                  <p>{save.message}</p>
+                </div>
+              )}
 
               {fill.kind === 'done' && (
                 <>
-                  <p className="ok">تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
+                  <div className="note ok">
+                    <Icon name="success" />
+                    <p>تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
+                  </div>
                   {fill.warnings.map((warning) => (
-                    <p key={warning} className="warn">
-                      {warning}
-                    </p>
+                    <div key={warning} className="note warn">
+                      <Icon name="warning" />
+                      <p>{warning}</p>
+                    </div>
                   ))}
                 </>
               )}
-              {fill.kind === 'error' && <p className="error">{fill.message}</p>}
+              {fill.kind === 'error' && (
+                <div className="note error">
+                  <Icon name="error" />
+                  <p>{fill.message}</p>
+                </div>
+              )}
             </div>
           </section>
 

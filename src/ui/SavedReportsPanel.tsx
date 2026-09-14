@@ -4,6 +4,7 @@ import { fillDailyTemplate } from '../core/dailyReport'
 import { reviveSavedReport } from '../core/savedReport'
 import { deleteReport, listReports, type StoredReport } from '../db/store'
 import { formatMoney } from './format'
+import { Icon } from './Icon'
 
 interface Props {
   /** Bumped by the parent after a save, so the list refreshes. */
@@ -57,17 +58,36 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
   if (reports.length === 0) {
     return (
       <section className="panel no-print">
-        <h2>التقارير المحفوظة</h2>
-        <p className="muted">لا توجد تقارير محفوظة بعد.</p>
-        {error && <p className="error">{error}</p>}
+        <h2>
+          <Icon name="archive" />
+          التقارير المحفوظة
+        </h2>
+        <div className="empty">
+          <Icon name="document" />
+          <p>لا توجد تقارير محفوظة بعد.</p>
+        </div>
+        {error && (
+          <div className="note error">
+            <Icon name="error" />
+            <p>{error}</p>
+          </div>
+        )}
       </section>
     )
   }
 
   return (
     <section className="panel no-print">
-      <h2>التقارير المحفوظة</h2>
-      {error && <p className="error">{error}</p>}
+      <h2>
+        <Icon name="archive" />
+        التقارير المحفوظة
+      </h2>
+      {error && (
+        <div className="note error">
+          <Icon name="error" />
+          <p>{error}</p>
+        </div>
+      )}
 
       <div className="table-scroll">
         <table className="data-table">

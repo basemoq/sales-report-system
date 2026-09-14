@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from 'react'
 import { buildDailyReport, type DailyReportBuild, type SourceKind } from '../core/pipeline'
 import { getIngestedHashes } from '../db/store'
+import { Icon } from './Icon'
 
 interface Props {
   onBuilt: (report: DailyReportBuild) => void
@@ -62,14 +63,27 @@ export function UploadPanel({ onBuilt }: Props) {
 
   return (
     <section className="panel no-print">
-      <h2>رفع ملفات اليوم</h2>
+      <h2>
+        <Icon name="upload" />
+        رفع ملفات اليوم
+      </h2>
       <p className="muted">
         تقرير CACO المختصر والمفصّل (.xlsx)، وتقرير TABS وإيصال موازنة مدى (.pdf). يتعرّف
         التطبيق على كل ملف من محتواه، فلا يهم ترتيب الرفع ولا أسماء الملفات.
       </p>
 
-      <label className="file-input">
-        <span>اختر ملفات اليوم</span>
+      {/*
+        * The input still does the work — it simply covers the card, so the
+        * native click-to-browse and drag-and-drop both keep working unchanged.
+        */}
+      <label className={busy ? 'dropzone is-busy' : 'dropzone'}>
+        <Icon name="upload" />
+        <span className="dropzone-title">اسحب الملفات هنا أو اضغط لاختيارها</span>
+        <span className="dropzone-formats">
+          <span className="badge">XLSX</span>
+          <span className="badge">CSV</span>
+          <span className="badge">PDF</span>
+        </span>
         <input
           type="file"
           accept=".xlsx,.csv,.pdf"
@@ -79,30 +93,43 @@ export function UploadPanel({ onBuilt }: Props) {
         />
       </label>
 
-      {busy && <p className="muted">جارٍ المعالجة…</p>}
-      {error && <p className="error">{error}</p>}
+      {busy && (
+        <div className="note info">
+          <Icon name="info" />
+          <p>جارٍ المعالجة…</p>
+        </div>
+      )}
+      {error && (
+        <div className="note error">
+          <Icon name="error" />
+          <p>{error}</p>
+        </div>
+      )}
 
       {recognised.length > 0 && (
         <ul className="issues">
           {recognised.map((line) => (
             <li key={line} className="ok">
-              {line}
+              <Icon name="success" />
+              <span>{line}</span>
             </li>
           ))}
         </ul>
       )}
 
       {missing.length > 0 && (
-        <p className="muted">
-          لم تُرفع: {missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.
-        </p>
+        <div className="note info">
+          <Icon name="info" />
+          <p>لم تُرفع: {missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.</p>
+        </div>
       )}
 
       {notices.length > 0 && (
         <ul className="issues">
           {notices.map((notice, index) => (
             <li key={index} className="warning">
-              {notice}
+              <Icon name="warning" />
+              <span>{notice}</span>
             </li>
           ))}
         </ul>
