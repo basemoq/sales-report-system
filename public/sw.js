@@ -2,6 +2,10 @@
 // Bump to evict every cached asset from an earlier deploy.
 const CACHE = 'sales-report-v1'
 
+// The app is served from a subpath on GitHub Pages, so the shell is resolved
+// against this worker's own location rather than assumed to sit at the root.
+const SHELL = new URL('index.html', self.location.href).href
+
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
@@ -30,10 +34,10 @@ self.addEventListener('fetch', (event) => {
         try {
           const response = await fetch(request)
           const cache = await caches.open(CACHE)
-          cache.put('/index.html', response.clone())
+          cache.put(SHELL, response.clone())
           return response
         } catch {
-          const cached = await caches.match('/index.html')
+          const cached = await caches.match(SHELL)
           if (cached) return cached
           throw new Error('offline and no cached shell')
         }

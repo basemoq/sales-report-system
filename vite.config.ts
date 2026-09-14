@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  // GitHub Pages serves the app from /<repo>/, so every asset URL needs that
+  // prefix. Overridable for a deploy that sits at a domain root.
+  base: process.env.BASE_PATH ?? '/sales-report-system/',
   plugins: [react()],
   test: {
     environment: 'node',
