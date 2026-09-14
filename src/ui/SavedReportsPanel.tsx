@@ -66,57 +66,59 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
       <h2>التقارير المحفوظة</h2>
       {error && <p className="error">{error}</p>}
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>اليوم</th>
-            <th>المعرض</th>
-            <th>إجمالى المبيعات</th>
-            <th>حُفظ في</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {reports.map((report) => {
-            const saved = reviveSavedReport(report.data)
-            return (
-              <tr key={report.id}>
-                <td>{report.id}</td>
-                <td>{saved?.identity.showroom || '—'}</td>
-                <td className="num">
-                  {saved ? formatMoney(saved.figures.totalSales) : '—'}
-                </td>
-                <td>{report.createdAt.slice(0, 10)}</td>
-                <td>
-                  <div className="row-actions">
-                    <button type="button" className="link" onClick={() => redownload(report)}>
-                      تنزيل القالب
-                    </button>
-                    {confirming === report.id ? (
-                      <>
-                        <button type="button" className="link danger" onClick={() => remove(report.id)}>
-                          تأكيد الحذف
-                        </button>
-                        <button type="button" className="link" onClick={() => setConfirming(null)}>
-                          إلغاء
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => setConfirming(report.id)}
-                      >
-                        حذف
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>اليوم</th>
+              <th>المعرض</th>
+              <th>إجمالى المبيعات</th>
+              <th>حُفظ في</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {reports.map((report) => {
+              const saved = reviveSavedReport(report.data)
+              return (
+                <tr key={report.id}>
+                  <td>{report.id}</td>
+                  <td>{saved?.identity.showroom || '—'}</td>
+                  <td className="num">
+                    {saved ? formatMoney(saved.figures.totalSales) : '—'}
+                  </td>
+                  <td>{report.createdAt.slice(0, 10)}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button type="button" className="link" onClick={() => redownload(report)}>
+                        تنزيل القالب
                       </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                      {confirming === report.id ? (
+                        <>
+                          <button type="button" className="link danger" onClick={() => remove(report.id)}>
+                            تأكيد الحذف
+                          </button>
+                          <button type="button" className="link" onClick={() => setConfirming(null)}>
+                            إلغاء
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setConfirming(report.id)}
+                        >
+                          حذف
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       <p className="muted">
         حذف تقرير يسمح برفع ملفاته من جديد؛ بدون ذلك تُرفض كملفات سبق إدخالها.
       </p>

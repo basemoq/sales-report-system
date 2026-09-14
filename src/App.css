@@ -146,10 +146,34 @@ button.link {
   background: var(--head);
 }
 
-/* Figures line up so they can be checked against the source export. */
+/*
+ * A six-column table does not fit a phone, so it scrolls inside its own panel
+ * rather than pushing the page sideways.
+ */
+.table-scroll {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.table-scroll > table {
+  margin-top: 0;
+}
+
+/*
+ * Figures line up so they can be checked against the source export, and never
+ * wrap — a split amount is unreadable. Label columns do wrap, which is what
+ * keeps a narrow table inside the screen instead of scrolling it out of view.
+ */
 .num {
   text-align: end;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Without this the action links stack one word per line. */
+.row-actions button,
+.data-table td .link {
+  white-space: nowrap;
 }
 
 .issues {
@@ -195,6 +219,11 @@ button.link {
   .data-table,
   .day-table {
     font-size: 10pt;
+  }
+
+  /* Print the whole table, not the slice the screen was scrolled to. */
+  .table-scroll {
+    overflow: visible;
   }
 
   .data-table thead th,

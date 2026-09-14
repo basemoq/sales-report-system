@@ -109,24 +109,26 @@ export function TemplatePanel({ onTemplateChanged }: Props) {
             </ul>
           )}
 
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ورقة العمل</th>
-                <th>صفوف</th>
-                <th>معادلات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {candidate.validation.stats.sheetNames.map((sheet) => (
-                <tr key={sheet}>
-                  <td>{sheet}</td>
-                  <td className="num">{candidate.validation.stats.populatedRows[sheet] ?? 0}</td>
-                  <td className="num">{candidate.validation.stats.formulaCells[sheet] ?? 0}</td>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ورقة العمل</th>
+                  <th>صفوف</th>
+                  <th>معادلات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {candidate.validation.stats.sheetNames.map((sheet) => (
+                  <tr key={sheet}>
+                    <td>{sheet}</td>
+                    <td className="num">{candidate.validation.stats.populatedRows[sheet] ?? 0}</td>
+                    <td className="num">{candidate.validation.stats.formulaCells[sheet] ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {candidate.validation.valid ? (
             <div className="actions">

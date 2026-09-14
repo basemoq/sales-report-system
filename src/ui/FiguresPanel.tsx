@@ -30,50 +30,54 @@ export function FiguresPanel({
     <section className="panel" id="figures">
       <h2>تقرير مبيعات المعارض اليومي — {reportId}</h2>
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>النظام</th>
-            <th>التصنيف</th>
-            <th>اجمالى المبلغ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {systemRows.map(([system, category, amount]) => (
-            <tr key={`${system}-${category}`}>
-              <td>{system}</td>
-              <td>{category}</td>
-              <td className="num">{formatMoney(amount)}</td>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>النظام</th>
+              <th>التصنيف</th>
+              <th>اجمالى المبلغ</th>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th colSpan={2}>إجمالى المبيعات</th>
-            <th className="num">{formatMoney(figures.totalSales)}</th>
-          </tr>
-        </tfoot>
-      </table>
+          </thead>
+          <tbody>
+            {systemRows.map(([system, category, amount]) => (
+              <tr key={`${system}-${category}`}>
+                <td>{system}</td>
+                <td>{category}</td>
+                <td className="num">{formatMoney(amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colSpan={2}>إجمالى المبيعات</th>
+              <th className="num">{formatMoney(figures.totalSales)}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
       <h3>التحصيل</h3>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>ايداع نقدي</th>
-            <th>شبكة - مدي</th>
-            <th>فيزا</th>
-            <th>ماستر كارد</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className="num">{formatMoney(figures.cashDeposit)}</td>
-            <td className="num">{formatMoney(figures.cards.mada)}</td>
-            <td className="num">{formatMoney(figures.cards.visa)}</td>
-            <td className="num">{formatMoney(figures.cards.mastercard)}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ايداع نقدي</th>
+              <th>شبكة - مدي</th>
+              <th>فيزا</th>
+              <th>ماستر كارد</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="num">{formatMoney(figures.cashDeposit)}</td>
+              <td className="num">{formatMoney(figures.cards.mada)}</td>
+              <td className="num">{formatMoney(figures.cards.visa)}</td>
+              <td className="num">{formatMoney(figures.cards.mastercard)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p className="muted">
         الإيداع النقدي يحسبه القالب نفسه: إجمالى المبيعات ناقص ما حُصِّل بالبطاقات.
       </p>

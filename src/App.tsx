@@ -23,12 +23,9 @@ import { TemplatePanel } from './ui/TemplatePanel'
 import { UploadPanel } from './ui/UploadPanel'
 import './App.css'
 
-/**
- * Names to pick from, beyond whatever the stored template already carries.
- * The shop's own list goes here once it is provided.
- */
-const SHOWROOMS: string[] = []
-const SUPERVISORS: string[] = []
+/** Names offered in the header pickers; anything else is typed under «أخرى». */
+const SHOWROOMS = ['الشرائع']
+const SUPERVISORS = ['باسم العولقي']
 
 type SaveState =
   | { kind: 'idle' }

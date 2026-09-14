@@ -40,50 +40,52 @@ export function EmployeesPanel({ employees, reportId }: Props) {
         التي تُخرج النص العربي موصولًا وقابلًا للبحث داخل الملف.
       </p>
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>الموظف</th>
-            <th>الإجمالي</th>
-            <th>عدد العمليات</th>
-            {methods.map((method) => (
-              <th key={method}>{method}</th>
-            ))}
-            <th className="no-print"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {employees.map((employee) => (
-            <tr key={employee.userId}>
-              <td>{employee.userId}</td>
-              <td className="num">{formatMoney(employee.total)}</td>
-              <td className="num">{formatCount(employee.transactions)}</td>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>الموظف</th>
+              <th>الإجمالي</th>
+              <th>عدد العمليات</th>
               {methods.map((method) => (
-                <td key={method} className="num">
-                  {formatMoney(employee.byPaymentMethod[method] ?? 0)}
-                </td>
+                <th key={method}>{method}</th>
               ))}
-              <td className="no-print">
-                <button
-                  type="button"
-                  className="link"
-                  onClick={() => setOpen(open === employee.userId ? null : employee.userId)}
-                  aria-expanded={open === employee.userId}
-                >
-                  {open === employee.userId ? 'إخفاء التفاصيل' : 'تفاصيل يوم بيوم'}
-                </button>
-              </td>
+              <th className="no-print"></th>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th>الإجمالي</th>
-            <th className="num">{formatMoney(total)}</th>
-            <th colSpan={methods.length + 2}></th>
-          </tr>
-        </tfoot>
-      </table>
+          </thead>
+          <tbody>
+            {employees.map((employee) => (
+              <tr key={employee.userId}>
+                <td>{employee.userId}</td>
+                <td className="num">{formatMoney(employee.total)}</td>
+                <td className="num">{formatCount(employee.transactions)}</td>
+                {methods.map((method) => (
+                  <td key={method} className="num">
+                    {formatMoney(employee.byPaymentMethod[method] ?? 0)}
+                  </td>
+                ))}
+                <td className="no-print">
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => setOpen(open === employee.userId ? null : employee.userId)}
+                    aria-expanded={open === employee.userId}
+                  >
+                    {open === employee.userId ? 'إخفاء التفاصيل' : 'تفاصيل يوم بيوم'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>الإجمالي</th>
+              <th className="num">{formatMoney(total)}</th>
+              <th colSpan={methods.length + 2}></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
       {employees
         .filter((employee) => employee.userId === open)
