@@ -1,0 +1,9 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, "Segoe UI", Tahoma, sans-serif;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0;
+}
