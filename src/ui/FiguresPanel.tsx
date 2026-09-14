@@ -4,9 +4,19 @@ import { formatMoney } from './format'
 interface Props {
   figures: DailyFigures
   reportId: string
+  /** The mada receipt shows the shape that can mean Visa is really MasterCard. */
+  visaMayBeMastercard: boolean
+  treatVisaAsMastercard: boolean
+  onTreatVisaAsMastercard: (value: boolean) => void
 }
 
-export function FiguresPanel({ figures, reportId }: Props) {
+export function FiguresPanel({
+  figures,
+  reportId,
+  visaMayBeMastercard,
+  treatVisaAsMastercard,
+  onTreatVisaAsMastercard,
+}: Props) {
   const systemRows: [string, string, number][] = [
     ['TABS', 'Total Bill Payment', figures.tabs.billPayment],
     ['TABS', 'Total Ordering', figures.tabs.ordering],
@@ -67,6 +77,25 @@ export function FiguresPanel({ figures, reportId }: Props) {
       <p className="muted">
         الإيداع النقدي يحسبه القالب نفسه: إجمالى المبيعات ناقص ما حُصِّل بالبطاقات.
       </p>
+
+      {visaMayBeMastercard && (
+        <div className="notice no-print">
+          <p className="warn">
+            إيصال مدى يحمل مبلغًا في قسم <code>visa</code> الأول بينما قسم <code>VISA</code> في
+            آخر الإيصال يقول «لا يوجد عمليات». هذا هو شكل الخطأ المعروف في الطابعة، حيث يُطبع
+            تحصيل ماستركارد تحت اسم فيزا. الشكلان متطابقان على الورق فلا يمكن التمييز بينهما
+            آليًا.
+          </p>
+          <label>
+            <input
+              type="checkbox"
+              checked={treatVisaAsMastercard}
+              onChange={(event) => onTreatVisaAsMastercard(event.target.checked)}
+            />{' '}
+            احتسب المبلغ ماستركارد بدل فيزا
+          </label>
+        </div>
+      )}
     </section>
   )
 }

@@ -84,6 +84,22 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
   }
 }
 
+/**
+ * Moves the Visa figure into the MasterCard column, for the receipts where the
+ * terminal printed a MasterCard settlement under a `visa` heading. The two look
+ * identical on paper, so this is applied only when the operator says so.
+ */
+export function reassignVisaToMastercard(figures: DailyFigures): DailyFigures {
+  return {
+    ...figures,
+    cards: {
+      mada: figures.cards.mada,
+      visa: 0,
+      mastercard: round2(figures.cards.mastercard + figures.cards.visa),
+    },
+  }
+}
+
 export class TemplateFillError extends Error {
   constructor(message: string) {
     super(message)

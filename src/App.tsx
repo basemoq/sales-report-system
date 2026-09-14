@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { checkTemplateShop, fillDailyTemplate } from './core/dailyReport'
+import { checkTemplateShop, fillDailyTemplate, reassignVisaToMastercard } from './core/dailyReport'
 import type { DailyReportBuild } from './core/pipeline'
 import {
   getReport,
@@ -46,22 +46,33 @@ export default function App() {
   const [report, setReport] = useState<DailyReportBuild | null>(null)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [fill, setFill] = useState<FillState>({ kind: 'idle' })
+  const [visaIsMastercard, setVisaIsMastercard] = useState(false)
 
   function onBuilt(built: DailyReportBuild) {
     setReport(built)
     setSave({ kind: 'idle' })
     setFill({ kind: 'idle' })
+    setVisaIsMastercard(false)
   }
 
+  // Everything downstream — the displayed figures, the saved report and the
+  // filled template — reads the same corrected figures.
+  const figures =
+    report === null
+      ? null
+      : visaIsMastercard
+        ? reassignVisaToMastercard(report.figures)
+        : report.figures
+
   async function persist(overwrite: boolean) {
-    if (report === null) return
+    if (report === null || figures === null) return
     try {
       await saveReport(
         {
           id: report.reportId,
           periodKey: report.periodKey,
           createdAt: new Date().toISOString(),
-          data: { figures: report.figures, employees: report.employees },
+          data: { figures, employees: report.employees },
         },
         { overwrite },
       )
@@ -85,7 +96,7 @@ export default function App() {
   }
 
   async function fillTemplate() {
-    if (report === null) return
+    if (report === null || figures === null) return
     try {
       const template = await getTemplate('default')
       if (template === undefined) {
@@ -106,7 +117,7 @@ export default function App() {
         }
       }
 
-      const result = await fillDailyTemplate(template.bytes, report.figures)
+      const result = await fillDailyTemplate(template.bytes, figures)
       // ASCII: a non-Latin download name is dropped by some browsers and by
       // Windows shares, leaving an extension-less "download" the user cannot open.
       download(result.bytes, `daily-sales-${report.shopId ?? 'report'}-${report.reportId}.xlsx`)
@@ -129,9 +140,15 @@ export default function App() {
       <TemplatePanel />
       <UploadPanel onBuilt={onBuilt} />
 
-      {report && (
+      {report && figures && (
         <>
-          <FiguresPanel figures={report.figures} reportId={report.reportId} />
+          <FiguresPanel
+            figures={figures}
+            reportId={report.reportId}
+            visaMayBeMastercard={report.visaMayBeMastercard}
+            treatVisaAsMastercard={visaIsMastercard}
+            onTreatVisaAsMastercard={setVisaIsMastercard}
+          />
 
           <section className="panel no-print">
             <h2>الإخراج</h2>

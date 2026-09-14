@@ -123,6 +123,54 @@ describe('parseMadaReconciliation', () => {
     expect(unmatched.totalsMatched).toBe(false)
   })
 
+  describe('the terminal printing MasterCard under a visa heading', () => {
+    it('flags money on the first visa section when the last one settled nothing', () => {
+      const report = parseMadaReconciliation([
+        ...head(),
+        ...scheme(900, 'mada', 9, '1190.20'),
+        ...scheme(600, 'visa', 3, '590.59'),
+        ...emptyScheme(300, 'JB'),
+        ...emptyScheme(250, 'VISA'),
+      ])
+
+      expect(report.visaMayBeMastercard).toBe(true)
+      // The amount still lands in Visa; only a person can say it is MasterCard.
+      expect(report.cards.visa).toBeCloseTo(590.59, 2)
+      expect(report.cards.mastercard).toBe(0)
+    })
+
+    it('does not flag a receipt whose only visa section carries the money', () => {
+      const report = parseMadaReconciliation([
+        ...head(),
+        ...scheme(900, 'mada', 9, '1190.20'),
+        ...scheme(600, 'visa', 3, '590.59'),
+      ])
+
+      expect(report.visaMayBeMastercard).toBe(false)
+    })
+
+    it('does not flag a receipt where both visa sections carry money', () => {
+      const report = parseMadaReconciliation([
+        ...head(),
+        ...scheme(900, 'visa', 3, '590.59'),
+        ...scheme(500, 'VISA', 1, '100.00'),
+      ])
+
+      expect(report.visaMayBeMastercard).toBe(false)
+    })
+
+    it('does not flag a receipt with no visa money at all', () => {
+      const report = parseMadaReconciliation([
+        ...head(),
+        ...scheme(900, 'mada', 9, '1190.20'),
+        ...emptyScheme(500, 'visa'),
+        ...emptyScheme(400, 'VISA'),
+      ])
+
+      expect(report.visaMayBeMastercard).toBe(false)
+    })
+  })
+
   it('refuses a PDF that is not a reconciliation receipt', () => {
     expect(() => parseMadaReconciliation([at(700, 'Consolidated Report')])).toThrow(
       MadaFormatError,

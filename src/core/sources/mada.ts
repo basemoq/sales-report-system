@@ -31,6 +31,14 @@ export interface MadaReconciliation {
   unmapped: SchemeTotals[]
   /** True when the receipt itself reported the totals as matched. */
   totalsMatched: boolean
+  /**
+   * The terminal sometimes prints a MasterCard settlement under the first
+   * `visa` heading, which shows up as money on that section while the real
+   * `VISA` section at the end of the receipt reports no transactions. The two
+   * cases are identical on paper, so this only flags the shape — the operator
+   * decides which column the amount belongs in.
+   */
+  visaMayBeMastercard: boolean
 }
 
 /** Card schemes a mada terminal settles, as printed at the section head. */
@@ -143,12 +151,18 @@ export function parseMadaReconciliation(
     else if (scheme.amount !== 0) unmapped.push(scheme)
   }
 
+  const visaSections = schemes.filter((scheme) => labelKey(scheme.scheme) === 'visa')
+
   return {
     terminalDate: parseDateCell(findTerminalDate(ordered)),
     schemes,
     cards,
     unmapped,
     totalsMatched: ordered.some((item) => labelKey(item.text) === TOTALS_MATCHED),
+    visaMayBeMastercard:
+      visaSections.length > 1 &&
+      visaSections[0].amount > 0 &&
+      visaSections.slice(1).every((section) => section.amount === 0),
   }
 }
 

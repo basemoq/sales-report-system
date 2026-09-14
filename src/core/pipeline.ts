@@ -47,6 +47,11 @@ export interface DailyReportBuild {
   periodKey: string
   /** The shop the sources belong to, for checking the template matches. */
   shopId: string | null
+  /**
+   * The mada receipt shows the shape that means its Visa figure may really be
+   * a MasterCard settlement. Only a person can tell the two apart.
+   */
+  visaMayBeMastercard: boolean
   figures: DailyFigures
   employees: EmployeeSummary[]
   sources: RecognisedSource[]
@@ -214,6 +219,7 @@ export async function buildDailyReport(
     periodKey: periodKey(date),
     shopId:
       caco?.parameters.shopId ?? detailed?.parameters.shopId ?? tabs?.warehouse ?? null,
+    visaMayBeMastercard: mada?.visaMayBeMastercard ?? false,
     figures,
     employees: summarizeEmployees(detailed?.transactions ?? []),
     sources,

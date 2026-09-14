@@ -4,6 +4,7 @@ import {
   buildDailyFigures,
   checkTemplateShop,
   fillDailyTemplate,
+  reassignVisaToMastercard,
   TemplateFillError,
   type DailyFigures,
 } from './dailyReport'
@@ -36,6 +37,7 @@ const mada = (
   cards,
   unmapped: [],
   totalsMatched: true,
+  visaMayBeMastercard: false,
 })
 
 const CACO_ROWS = [
@@ -232,6 +234,36 @@ describe('fillDailyTemplate', () => {
     const bytes = (await workbook.xlsx.writeBuffer()) as ArrayBuffer
 
     await expect(fillDailyTemplate(bytes, FIGURES)).rejects.toThrow(TemplateFillError)
+  })
+})
+
+describe('reassignVisaToMastercard', () => {
+  const figures = buildDailyFigures({ caco: caco(CACO_ROWS), tabs: tabs(), mada: mada() })
+
+  it('moves the Visa figure into the MasterCard column', () => {
+    const corrected = reassignVisaToMastercard(figures)
+
+    expect(corrected.cards).toEqual({ mada: 1190.2, visa: 0, mastercard: 590.59 })
+  })
+
+  it('adds to a MasterCard figure that is already there', () => {
+    const corrected = reassignVisaToMastercard(
+      buildDailyFigures({ mada: mada({ mada: 0, visa: 100, mastercard: 37.26 }) }),
+    )
+
+    expect(corrected.cards.mastercard).toBe(137.26)
+  })
+
+  it('leaves the cash deposit alone, since the card total is unchanged', () => {
+    expect(reassignVisaToMastercard(figures).cashDeposit).toBe(figures.cashDeposit)
+  })
+
+  it('leaves the sales figures alone', () => {
+    const corrected = reassignVisaToMastercard(figures)
+
+    expect(corrected.totalSales).toBe(figures.totalSales)
+    expect(corrected.bss).toEqual(figures.bss)
+    expect(corrected.tabs).toEqual(figures.tabs)
   })
 })
 
