@@ -9,7 +9,12 @@ interface Candidate {
   validation: TemplateValidation
 }
 
-export function TemplatePanel() {
+interface Props {
+  /** Called after the stored template is replaced or removed. */
+  onTemplateChanged: () => void
+}
+
+export function TemplatePanel({ onTemplateChanged }: Props) {
   const [templates, setTemplates] = useState<StoredTemplate[]>([])
   const [candidate, setCandidate] = useState<Candidate | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -51,6 +56,7 @@ export function TemplatePanel() {
       })
       setTemplates(await listTemplates())
       setCandidate(null)
+      onTemplateChanged()
     } catch (cause) {
       setError((cause as Error).message)
     }
@@ -59,6 +65,7 @@ export function TemplatePanel() {
   async function remove(id: string) {
     await deleteTemplate(id)
     setTemplates(await listTemplates())
+    onTemplateChanged()
   }
 
   const stored = templates[0]

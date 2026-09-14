@@ -228,3 +228,42 @@ button.link {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.9em;
 }
+
+.fields {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 14rem;
+  flex: 1;
+}
+
+.fields span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+select {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: inherit;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+button.link.danger {
+  color: var(--danger);
+}

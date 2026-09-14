@@ -1,6 +1,13 @@
-import { useState } from 'react'
-import { checkTemplateShop, fillDailyTemplate, reassignVisaToMastercard } from './core/dailyReport'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  checkTemplateShop,
+  fillDailyTemplate,
+  readTemplateIdentity,
+  reassignVisaToMastercard,
+  type ReportIdentity,
+} from './core/dailyReport'
 import type { DailyReportBuild } from './core/pipeline'
+import type { SavedReportData } from './core/savedReport'
 import {
   getReport,
   getTemplate,
@@ -10,9 +17,18 @@ import {
 } from './db/store'
 import { EmployeesPanel } from './ui/EmployeesPanel'
 import { FiguresPanel } from './ui/FiguresPanel'
+import { IdentityPanel } from './ui/IdentityPanel'
+import { SavedReportsPanel } from './ui/SavedReportsPanel'
 import { TemplatePanel } from './ui/TemplatePanel'
 import { UploadPanel } from './ui/UploadPanel'
 import './App.css'
+
+/**
+ * Names to pick from, beyond whatever the stored template already carries.
+ * The shop's own list goes here once it is provided.
+ */
+const SHOWROOMS: string[] = []
+const SUPERVISORS: string[] = []
 
 type SaveState =
   | { kind: 'idle' }
@@ -47,6 +63,26 @@ export default function App() {
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [fill, setFill] = useState<FillState>({ kind: 'idle' })
   const [visaIsMastercard, setVisaIsMastercard] = useState(false)
+  const [templateIdentity, setTemplateIdentity] = useState<Partial<ReportIdentity>>({})
+  const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
+  const [savedCount, setSavedCount] = useState(0)
+
+  const loadTemplateIdentity = useCallback(async () => {
+    const template = await getTemplate('default')
+    const fromTemplate = template ? await readTemplateIdentity(template.bytes) : {}
+    setTemplateIdentity(fromTemplate)
+    // Only seed the choice; a selection the operator already made stands.
+    setIdentity((current) => ({
+      showroom: current.showroom || (fromTemplate.showroom ?? ''),
+      supervisor: current.supervisor || (fromTemplate.supervisor ?? ''),
+    }))
+  }, [])
+
+  useEffect(() => {
+    loadTemplateIdentity().catch(() => {
+      // A template that cannot be read is already reported by its own panel.
+    })
+  }, [loadTemplateIdentity])
 
   function onBuilt(built: DailyReportBuild) {
     setReport(built)
@@ -72,7 +108,12 @@ export default function App() {
           id: report.reportId,
           periodKey: report.periodKey,
           createdAt: new Date().toISOString(),
-          data: { figures, employees: report.employees },
+          data: {
+            figures,
+            employees: report.employees,
+            identity,
+            shopId: report.shopId,
+          } satisfies SavedReportData,
         },
         { overwrite },
       )
@@ -85,6 +126,7 @@ export default function App() {
         })),
       )
       setSave({ kind: 'saved' })
+      setSavedCount((count) => count + 1)
     } catch (cause) {
       if (cause instanceof ReportExistsError) {
         const existing = await getReport(cause.reportId)
@@ -117,7 +159,7 @@ export default function App() {
         }
       }
 
-      const result = await fillDailyTemplate(template.bytes, figures)
+      const result = await fillDailyTemplate(template.bytes, figures, identity)
       // ASCII: a non-Latin download name is dropped by some browsers and by
       // Windows shares, leaving an extension-less "download" the user cannot open.
       download(result.bytes, `daily-sales-${report.shopId ?? 'report'}-${report.reportId}.xlsx`)
@@ -137,7 +179,14 @@ export default function App() {
         <h1>نظام تقارير المبيعات</h1>
       </header>
 
-      <TemplatePanel />
+      <TemplatePanel onTemplateChanged={loadTemplateIdentity} />
+      <IdentityPanel
+        identity={identity}
+        onChange={setIdentity}
+        fromTemplate={templateIdentity}
+        showrooms={SHOWROOMS}
+        supervisors={SUPERVISORS}
+      />
       <UploadPanel onBuilt={onBuilt} />
 
       {report && figures && (
@@ -197,6 +246,8 @@ export default function App() {
           <EmployeesPanel employees={report.employees} reportId={report.reportId} />
         </>
       )}
+
+      <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
     </div>
   )
 }

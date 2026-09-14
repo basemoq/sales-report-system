@@ -4,6 +4,7 @@ import {
   buildDailyFigures,
   checkTemplateShop,
   fillDailyTemplate,
+  readTemplateIdentity,
   reassignVisaToMastercard,
   TemplateFillError,
   type DailyFigures,
@@ -264,6 +265,51 @@ describe('reassignVisaToMastercard', () => {
     expect(corrected.totalSales).toBe(figures.totalSales)
     expect(corrected.bss).toEqual(figures.bss)
     expect(corrected.tabs).toEqual(figures.tabs)
+  })
+})
+
+describe('the showroom and supervisor', () => {
+  it('reads the pair the template already carries', async () => {
+    await expect(readTemplateIdentity(await templateBytes())).resolves.toEqual({
+      showroom: 'الشرائع',
+      supervisor: 'باسم العولقي',
+    })
+  })
+
+  it('writes the chosen pair into the template head', async () => {
+    const result = await fillDailyTemplate(await templateBytes(), FIGURES, {
+      showroom: 'العزيزية',
+      supervisor: 'خالد',
+    })
+    const sheet = await reload(result.bytes)
+
+    expect(sheet.getCell('B2').value).toBe('العزيزية')
+    expect(sheet.getCell('B3').value).toBe('خالد')
+  })
+
+  it('leaves the template as it is when nothing was chosen', async () => {
+    const sheet = await reload((await fillDailyTemplate(await templateBytes(), FIGURES)).bytes)
+
+    expect(sheet.getCell('B2').value).toBe('الشرائع')
+    expect(sheet.getCell('B3').value).toBe('باسم العولقي')
+  })
+
+  it('ignores a blank choice rather than emptying the template cell', async () => {
+    const result = await fillDailyTemplate(await templateBytes(), FIGURES, {
+      showroom: '   ',
+      supervisor: '',
+    })
+
+    expect((await reload(result.bytes)).getCell('B2').value).toBe('الشرائع')
+  })
+
+  it('trims the name it writes', async () => {
+    const result = await fillDailyTemplate(await templateBytes(), FIGURES, {
+      showroom: '  العزيزية  ',
+      supervisor: 'خالد',
+    })
+
+    expect((await reload(result.bytes)).getCell('B2').value).toBe('العزيزية')
   })
 })
 

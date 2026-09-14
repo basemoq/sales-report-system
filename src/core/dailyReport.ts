@@ -124,6 +124,32 @@ const CATEGORY_COLUMN = ['التصنيف']
 const AMOUNT_COLUMN = ['اجمالى المبلغ', 'إجمالي المبلغ', 'المبلغ']
 const DATE_LABEL = ['التاريخ']
 const SHOP_CODE_LABEL = ['كود المعرض']
+const SHOWROOM_LABEL = ['إسم المعرض', 'اسم المعرض']
+const SUPERVISOR_LABEL = ['مشرف المعرض']
+
+/** Who the report is for, chosen before the day's files are uploaded. */
+export interface ReportIdentity {
+  showroom: string
+  supervisor: string
+}
+
+/** The showroom and supervisor the template already carries. */
+export async function readTemplateIdentity(
+  templateBytes: ArrayBuffer,
+): Promise<Partial<ReportIdentity>> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(templateBytes)
+  const sheet = workbook.worksheets[0]
+  if (!sheet) return {}
+
+  const read = (labels: string[]) => {
+    const label = findColumn(sheet, labels)
+    if (label === null) return undefined
+    return cellText(sheet.getCell(label.row, label.column + 1)) ?? undefined
+  }
+
+  return { showroom: read(SHOWROOM_LABEL), supervisor: read(SUPERVISOR_LABEL) }
+}
 
 const CARD_HEADERS: Record<keyof CardTotals, string[]> = {
   mada: ['شبكة - مدي', 'شبكة مدى', 'مدى', 'شبكة - مدى'],
@@ -186,6 +212,7 @@ function findColumn(
 export async function fillDailyTemplate(
   templateBytes: ArrayBuffer,
   figures: DailyFigures,
+  identity: Partial<ReportIdentity> = {},
 ): Promise<FillResult> {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(templateBytes)
@@ -197,14 +224,16 @@ export async function fillDailyTemplate(
   const skippedFormulas: string[] = []
   const warnings: string[] = []
 
-  const write = (row: number, column: number, value: number | Date) => {
+  const write = (row: number, column: number, value: number | string | Date) => {
     const cell = sheet.getCell(row, column)
     if (holdsFormula(cell)) {
       skippedFormulas.push(cell.address)
       return
     }
     cell.value = value
-    written.push(`${cell.address} = ${value instanceof Date ? value.toISOString().slice(0, 10) : value}`)
+    written.push(
+      `${cell.address} = ${value instanceof Date ? value.toISOString().slice(0, 10) : value}`,
+    )
   }
 
   const systemColumn = findColumn(sheet, SYSTEM_COLUMN)
@@ -252,6 +281,18 @@ export async function fillDailyTemplate(
     const dateLabel = findColumn(sheet, DATE_LABEL)
     if (dateLabel === null) warnings.push('لم يُعثر في القالب على خانة «التاريخ».')
     else write(dateLabel.row, dateLabel.column + 1, figures.date)
+  }
+
+  // Left as the template has them when the operator did not choose.
+  const identityTargets: [string | undefined, string[], string][] = [
+    [identity.showroom, SHOWROOM_LABEL, 'إسم المعرض'],
+    [identity.supervisor, SUPERVISOR_LABEL, 'مشرف المعرض'],
+  ]
+  for (const [value, labels, name] of identityTargets) {
+    if (value === undefined || value.trim() === '') continue
+    const label = findColumn(sheet, labels)
+    if (label === null) warnings.push(`لم يُعثر في القالب على خانة «${name}».`)
+    else write(label.row, label.column + 1, value.trim())
   }
 
   if (skippedFormulas.length > 0) {
