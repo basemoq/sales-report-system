@@ -15,6 +15,13 @@ let pdfjs: Promise<PdfjsModule> | null = null
  * pdf.js is ~1MB, so it is pulled in only when a PDF is actually opened. The
  * legacy build is used because it runs unchanged in both the browser and the
  * Node test environment.
+ *
+ * Held at v4 deliberately: from v5 on, even the legacy build assumes a browser
+ * with `Promise.withResolvers` — Safari 17.4, March 2024 — and calls it for
+ * every message it sends its worker, so on an older iPhone every PDF failed
+ * with "undefined is not a function" while the Excel files, which never touch
+ * pdf.js, went through. The v4 legacy build carries the polyfills for that and
+ * for the rest of what an older Safari lacks. Check that before raising it.
  */
 function loadPdfjs(): Promise<PdfjsModule> {
   pdfjs ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((module) => {
