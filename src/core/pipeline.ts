@@ -42,8 +42,13 @@ interface FingerprintedFile extends UploadedFile {
 }
 
 export interface DailyReportBuild {
-  /** The day the report covers, `YYYY-MM-DD`; also its identity. */
+  /**
+   * Storage key: the shop and the day together. Two showrooms reporting the
+   * same day on one device are two reports, not one overwriting the other.
+   */
   reportId: string
+  /** The day the report covers, `YYYY-MM-DD`, for display and file names. */
+  reportDate: string
   periodKey: string
   /** The shop the sources belong to, for checking the template matches. */
   shopId: string | null
@@ -60,6 +65,15 @@ export interface DailyReportBuild {
   /** Sources this upload did not include; each simply counts as zero. */
   missingSources: string[]
   warnings: string[]
+}
+
+/**
+ * A report is identified by its shop and its day. Sources that name no shop
+ * fall back to the day alone, which is also the key every report saved before
+ * shops were part of it already carries.
+ */
+export function reportKey(shopId: string | null, isoDate: string): string {
+  return shopId === null ? isoDate : `${shopId}-${isoDate}`
 }
 
 export class NoDataError extends Error {
@@ -217,11 +231,15 @@ export async function buildDailyReport(
     throw new NoDataError('تعذّر تحديد تاريخ التقرير من الملفات المرفوعة.')
   }
 
+  const reportDate = toISODate(date)
+  const shopId =
+    caco?.parameters.shopId ?? detailed?.parameters.shopId ?? tabs?.warehouse ?? null
+
   return {
-    reportId: toISODate(date),
+    reportId: reportKey(shopId, reportDate),
+    reportDate,
     periodKey: periodKey(date),
-    shopId:
-      caco?.parameters.shopId ?? detailed?.parameters.shopId ?? tabs?.warehouse ?? null,
+    shopId,
     visaMayBeMastercard: mada?.visaMayBeMastercard ?? false,
     figures,
     employees: summarizeEmployees(detailed?.transactions ?? []),

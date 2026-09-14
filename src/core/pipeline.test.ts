@@ -76,11 +76,20 @@ const textUpload = (fileName: string, text: string): UploadedFile => ({
 })
 
 describe('buildDailyReport', () => {
-  it('identifies the report by the day its sources cover', async () => {
+  it('identifies the report by the shop and the day its sources cover', async () => {
     const report = await buildDailyReport([await cacoSummary()])
 
-    expect(report.reportId).toBe('2026-09-13')
+    expect(report.reportId).toBe('WFW430-2026-09-13')
+    expect(report.reportDate).toBe('2026-09-13')
     expect(report.periodKey).toBe('2026-09')
+  })
+
+  it('keeps two showrooms reporting the same day apart', async () => {
+    const riyadh = await buildDailyReport([await cacoSummary('a.xlsx', 'WFW430')])
+    const jeddah = await buildDailyReport([await cacoSummary('b.xlsx', 'WFW999')])
+
+    expect(riyadh.reportId).not.toBe(jeddah.reportId)
+    expect(riyadh.reportDate).toBe(jeddah.reportDate)
   })
 
   it('recognises each upload by its content, not its name', async () => {
@@ -126,7 +135,7 @@ describe('buildDailyReport', () => {
 
     expect(report.figures.tabs).toEqual({ billPayment: 0, ordering: 0, cashCollection: 0 })
     expect(report.figures.totalSales).toBe(4124.14)
-    expect(report.reportId).toBe('2026-09-13')
+    expect(report.reportDate).toBe('2026-09-13')
   })
 
   it('reports the sales from the detailed export when no summary was uploaded', async () => {

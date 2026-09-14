@@ -89,6 +89,7 @@ export default function App() {
             employees: report.employees,
             identity,
             shopId: report.shopId,
+            reportDate: report.reportDate,
           } satisfies SavedReportData,
         },
         { overwrite },
@@ -122,7 +123,7 @@ export default function App() {
       })
       // ASCII: a non-Latin download name is dropped by some browsers and by
       // Windows shares, leaving an extension-less "download" the user cannot open.
-      download(result.bytes, `daily-sales-${report.shopId ?? 'report'}-${report.reportId}.xlsx`)
+      download(result.bytes, `daily-sales-${report.reportId}.xlsx`)
       setFill({
         kind: 'done',
         written: result.written.length,
@@ -151,7 +152,7 @@ export default function App() {
         <>
           <FiguresPanel
             figures={figures}
-            reportId={report.reportId}
+            reportDate={report.reportDate}
             visaMayBeMastercard={report.visaMayBeMastercard}
             treatVisaAsMastercard={visaIsMastercard}
             onTreatVisaAsMastercard={setVisaIsMastercard}
@@ -167,7 +168,7 @@ export default function App() {
               {save.kind === 'confirm-replace' ? (
                 <>
                   <p className="warn">
-                    يوجد تقرير محفوظ بالمعرّف {report.reportId}
+                    يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
                     {save.existingCreatedAt && ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}.
                     الاستبدال نهائي ولا يمكن التراجع عنه.
                   </p>
@@ -201,7 +202,7 @@ export default function App() {
             </div>
           </section>
 
-          <EmployeesPanel employees={report.employees} reportId={report.reportId} />
+          <EmployeesPanel employees={report.employees} reportDate={report.reportDate} />
         </>
       )}
 

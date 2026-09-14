@@ -15,6 +15,7 @@ const saved = {
   employees: [],
   identity: { showroom: 'الشرائع', supervisor: 'باسم العولقي' },
   shopId: 'WFW430',
+  reportDate: '2026-09-13',
 }
 
 describe('reviveSavedReport', () => {
@@ -46,6 +47,15 @@ describe('reviveSavedReport', () => {
 
     expect(revived?.identity).toEqual({ showroom: '', supervisor: '' })
     expect(revived?.shopId).toBeNull()
+  })
+
+  it('recovers the day of a report saved before it was kept apart from the id', () => {
+    const revived = reviveSavedReport({ figures, employees: [] })
+    expect(revived?.reportDate).toBe('2026-09-13')
+  })
+
+  it('keeps the stored day when it is there', () => {
+    expect(reviveSavedReport(saved)?.reportDate).toBe('2026-09-13')
   })
 
   it('refuses data that carries no figures to refill from', () => {

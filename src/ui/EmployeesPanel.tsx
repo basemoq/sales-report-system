@@ -5,10 +5,10 @@ import { formatCount, formatMoney } from './format'
 
 interface Props {
   employees: readonly EmployeeSummary[]
-  reportId: string
+  reportDate: string
 }
 
-export function EmployeesPanel({ employees, reportId }: Props) {
+export function EmployeesPanel({ employees, reportDate }: Props) {
   const [open, setOpen] = useState<string | null>(null)
 
   if (employees.length === 0) {
@@ -30,7 +30,7 @@ export function EmployeesPanel({ employees, reportId }: Props) {
   return (
     <section className="panel" id="employee-report">
       <div className="panel-head">
-        <h2>تقرير الموظفين — {reportId}</h2>
+        <h2>تقرير الموظفين — {reportDate}</h2>
         <button type="button" className="no-print" onClick={() => window.print()}>
           تنزيل PDF
         </button>

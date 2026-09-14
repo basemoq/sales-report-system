@@ -18,7 +18,11 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
 
   const refresh = useCallback(async () => {
     const stored = await listReports()
-    setReports(stored.sort((a, b) => b.id.localeCompare(a.id)))
+    // Newest day first; the id now leads with the shop, so it cannot order this.
+    const dayOf = (report: StoredReport) => reviveSavedReport(report.data)?.reportDate ?? report.id
+    setReports(
+      stored.sort((a, b) => dayOf(b).localeCompare(dayOf(a)) || a.id.localeCompare(b.id)),
+    )
   }, [])
 
   useEffect(() => {
@@ -38,7 +42,7 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
         ...saved.identity,
         shopId: saved.shopId,
       })
-      onDownload(result.bytes, `daily-sales-${saved.shopId ?? 'report'}-${report.id}.xlsx`)
+      onDownload(result.bytes, `daily-sales-${report.id}.xlsx`)
     } catch (cause) {
       setError((cause as Error).message)
     }
@@ -71,6 +75,7 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
             <tr>
               <th>اليوم</th>
               <th>المعرض</th>
+              <th>الفرع</th>
               <th>إجمالى المبيعات</th>
               <th>حُفظ في</th>
               <th></th>
@@ -81,8 +86,9 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
               const saved = reviveSavedReport(report.data)
               return (
                 <tr key={report.id}>
-                  <td>{report.id}</td>
+                  <td>{saved?.reportDate || report.id}</td>
                   <td>{saved?.identity.showroom || '—'}</td>
+                  <td>{saved?.shopId || '—'}</td>
                   <td className="num">
                     {saved ? formatMoney(saved.figures.totalSales) : '—'}
                   </td>

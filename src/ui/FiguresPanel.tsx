@@ -3,7 +3,7 @@ import { formatMoney } from './format'
 
 interface Props {
   figures: DailyFigures
-  reportId: string
+  reportDate: string
   /** The mada receipt shows the shape that can mean Visa is really MasterCard. */
   visaMayBeMastercard: boolean
   treatVisaAsMastercard: boolean
@@ -12,7 +12,7 @@ interface Props {
 
 export function FiguresPanel({
   figures,
-  reportId,
+  reportDate,
   visaMayBeMastercard,
   treatVisaAsMastercard,
   onTreatVisaAsMastercard,
@@ -28,7 +28,7 @@ export function FiguresPanel({
 
   return (
     <section className="panel" id="figures">
-      <h2>تقرير مبيعات المعارض اليومي — {reportId}</h2>
+      <h2>تقرير مبيعات المعارض اليومي — {reportDate}</h2>
 
       <div className="table-scroll">
         <table className="data-table">
