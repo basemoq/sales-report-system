@@ -139,24 +139,6 @@ export interface TemplateHeader extends Partial<ReportIdentity> {
   shopId?: string | null
 }
 
-/** The showroom and supervisor the template already carries. */
-export async function readTemplateIdentity(
-  templateBytes: ArrayBuffer,
-): Promise<Partial<ReportIdentity>> {
-  const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(templateBytes)
-  const sheet = workbook.worksheets[0]
-  if (!sheet) return {}
-
-  const read = (labels: string[]) => {
-    const label = findColumn(sheet, labels)
-    if (label === null) return undefined
-    return cellText(sheet.getCell(label.row, label.column + 1)) ?? undefined
-  }
-
-  return { showroom: read(SHOWROOM_LABEL), supervisor: read(SUPERVISOR_LABEL) }
-}
-
 const CARD_HEADERS: Record<keyof CardTotals, string[]> = {
   mada: ['شبكة - مدي', 'شبكة مدى', 'مدى', 'شبكة - مدى'],
   visa: ['فيزا'],
@@ -316,27 +298,3 @@ export async function fillDailyTemplate(
   }
 }
 
-/**
- * Checks the template is for the shop the sources came from. The template
- * writes the code without its leading letter, so one containing the other
- * counts as a match.
- */
-export async function checkTemplateShop(
-  templateBytes: ArrayBuffer,
-  sourceShopId: string,
-): Promise<{ ok: boolean; templateShop: string | null }> {
-  const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(templateBytes)
-  const sheet = workbook.worksheets[0]
-  if (!sheet) return { ok: false, templateShop: null }
-
-  const label = findColumn(sheet, SHOP_CODE_LABEL)
-  if (label === null) return { ok: true, templateShop: null }
-
-  const templateShop = cellText(sheet.getCell(label.row, label.column + 1))
-  if (templateShop === null) return { ok: true, templateShop: null }
-
-  const a = matchKey(templateShop)
-  const b = matchKey(sourceShopId)
-  return { ok: a.includes(b) || b.includes(a), templateShop }
-}

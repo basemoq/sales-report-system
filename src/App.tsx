@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-  checkTemplateShop,
   fillDailyTemplate,
-  readTemplateIdentity,
   reassignVisaToMastercard,
   type ReportIdentity,
 } from './core/dailyReport'
 import type { DailyReportBuild } from './core/pipeline'
-import { getActiveTemplate } from './core/activeTemplate'
+import { getTemplateBytes } from './core/activeTemplate'
 import type { SavedReportData } from './core/savedReport'
 import {
   getReport,
@@ -19,7 +17,6 @@ import { EmployeesPanel } from './ui/EmployeesPanel'
 import { FiguresPanel } from './ui/FiguresPanel'
 import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
-import { TemplatePanel } from './ui/TemplatePanel'
 import { UploadPanel } from './ui/UploadPanel'
 import './App.css'
 
@@ -60,26 +57,8 @@ export default function App() {
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [fill, setFill] = useState<FillState>({ kind: 'idle' })
   const [visaIsMastercard, setVisaIsMastercard] = useState(false)
-  const [templateIdentity, setTemplateIdentity] = useState<Partial<ReportIdentity>>({})
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [savedCount, setSavedCount] = useState(0)
-
-  const loadTemplateIdentity = useCallback(async () => {
-    const template = await getActiveTemplate()
-    const fromTemplate = await readTemplateIdentity(template.bytes)
-    setTemplateIdentity(fromTemplate)
-    // Only seed the choice; a selection the operator already made stands.
-    setIdentity((current) => ({
-      showroom: current.showroom || (fromTemplate.showroom ?? ''),
-      supervisor: current.supervisor || (fromTemplate.supervisor ?? ''),
-    }))
-  }, [])
-
-  useEffect(() => {
-    loadTemplateIdentity().catch(() => {
-      // A template that cannot be read is already reported by its own panel.
-    })
-  }, [loadTemplateIdentity])
 
   function onBuilt(built: DailyReportBuild) {
     setReport(built)
@@ -137,19 +116,7 @@ export default function App() {
   async function fillTemplate() {
     if (report === null || figures === null) return
     try {
-      const template = await getActiveTemplate()
-
-      const warnings: string[] = []
-      if (report.shopId !== null) {
-        const check = await checkTemplateShop(template.bytes, report.shopId)
-        if (!check.ok) {
-          warnings.push(
-            `القالب يخص الفرع «${check.templateShop}» بينما الملفات تخص «${report.shopId}».`,
-          )
-        }
-      }
-
-      const result = await fillDailyTemplate(template.bytes, figures, {
+      const result = await fillDailyTemplate(await getTemplateBytes(), figures, {
         ...identity,
         shopId: report.shopId,
       })
@@ -159,7 +126,7 @@ export default function App() {
       setFill({
         kind: 'done',
         written: result.written.length,
-        warnings: [...warnings, ...result.warnings],
+        warnings: result.warnings,
       })
     } catch (cause) {
       setFill({ kind: 'error', message: (cause as Error).message })
@@ -172,11 +139,9 @@ export default function App() {
         <h1>نظام تقارير المبيعات</h1>
       </header>
 
-      <TemplatePanel onTemplateChanged={loadTemplateIdentity} />
       <IdentityPanel
         identity={identity}
         onChange={setIdentity}
-        fromTemplate={templateIdentity}
         showrooms={SHOWROOMS}
         supervisors={SUPERVISORS}
       />

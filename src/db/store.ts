@@ -1,14 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 
-export interface StoredTemplate {
-  id: string
-  name: string
-  fileName: string
-  hash: string
-  bytes: ArrayBuffer
-  savedAt: string
-}
-
 export interface StoredReport<TData = unknown> {
   /** The latest date the report covers, `YYYY-MM-DD`. */
   id: string
@@ -25,7 +16,6 @@ export interface IngestedFile {
 }
 
 interface ReportsDB extends DBSchema {
-  templates: { key: string; value: StoredTemplate }
   reports: { key: string; value: StoredReport; indexes: { periodKey: string } }
   ingestedFiles: { key: string; value: IngestedFile; indexes: { reportId: string } }
 }
@@ -48,7 +38,6 @@ let dbPromise: Promise<IDBPDatabase<ReportsDB>> | null = null
 export function getDB(): Promise<IDBPDatabase<ReportsDB>> {
   dbPromise ??= openDB<ReportsDB>(DB_NAME, DB_VERSION, {
     upgrade(db) {
-      db.createObjectStore('templates', { keyPath: 'id' })
       db.createObjectStore('reports', { keyPath: 'id' }).createIndex('periodKey', 'periodKey')
       db.createObjectStore('ingestedFiles', { keyPath: 'hash' }).createIndex(
         'reportId',
@@ -62,26 +51,6 @@ export function getDB(): Promise<IDBPDatabase<ReportsDB>> {
 /** Drops the memoized handle so a test can open a fresh database. */
 export function resetDBHandle(): void {
   dbPromise = null
-}
-
-export async function saveTemplate(template: StoredTemplate): Promise<void> {
-  const db = await getDB()
-  await db.put('templates', template)
-}
-
-export async function listTemplates(): Promise<StoredTemplate[]> {
-  const db = await getDB()
-  return db.getAll('templates')
-}
-
-export async function getTemplate(id: string): Promise<StoredTemplate | undefined> {
-  const db = await getDB()
-  return db.get('templates', id)
-}
-
-export async function deleteTemplate(id: string): Promise<void> {
-  const db = await getDB()
-  await db.delete('templates', id)
 }
 
 export async function getReport(id: string): Promise<StoredReport | undefined> {

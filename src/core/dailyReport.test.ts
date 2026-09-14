@@ -2,9 +2,7 @@ import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import {
   buildDailyFigures,
-  checkTemplateShop,
   fillDailyTemplate,
-  readTemplateIdentity,
   reassignVisaToMastercard,
   TemplateFillError,
   type DailyFigures,
@@ -269,13 +267,6 @@ describe('reassignVisaToMastercard', () => {
 })
 
 describe('the showroom and supervisor', () => {
-  it('reads the pair the template already carries', async () => {
-    await expect(readTemplateIdentity(await templateBytes())).resolves.toEqual({
-      showroom: 'الشرائع',
-      supervisor: 'باسم العولقي',
-    })
-  })
-
   it('writes the chosen pair into the template head', async () => {
     const result = await fillDailyTemplate(await templateBytes(), FIGURES, {
       showroom: 'العزيزية',
@@ -327,17 +318,3 @@ describe('the showroom and supervisor', () => {
   })
 })
 
-describe('checkTemplateShop', () => {
-  it('accepts the template code that omits the leading letter', async () => {
-    await expect(checkTemplateShop(await templateBytes(), 'WFW430')).resolves.toEqual({
-      ok: true,
-      templateShop: 'FW430',
-    })
-  })
-
-  it('rejects a template belonging to another shop', async () => {
-    const check = await checkTemplateShop(await templateBytes(), 'WFW999')
-    expect(check.ok).toBe(false)
-    expect(check.templateShop).toBe('FW430')
-  })
-})

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getActiveTemplate } from '../core/activeTemplate'
+import { getTemplateBytes } from '../core/activeTemplate'
 import { fillDailyTemplate } from '../core/dailyReport'
 import { reviveSavedReport } from '../core/savedReport'
 import { deleteReport, listReports, type StoredReport } from '../db/store'
@@ -34,8 +34,7 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
         return
       }
 
-      const template = await getActiveTemplate()
-      const result = await fillDailyTemplate(template.bytes, saved.figures, {
+      const result = await fillDailyTemplate(await getTemplateBytes(), saved.figures, {
         ...saved.identity,
         shopId: saved.shopId,
       })

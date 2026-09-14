@@ -11,9 +11,6 @@ import {
   ReportExistsError,
   resetDBHandle,
   saveReport,
-  saveTemplate,
-  listTemplates,
-  deleteTemplate,
   type StoredReport,
 } from './store'
 
@@ -94,30 +91,3 @@ describe('reports', () => {
   })
 })
 
-describe('templates', () => {
-  const template = {
-    id: 'default',
-    name: 'القالب المعتمد',
-    fileName: 'template.xlsx',
-    hash: 'abc',
-    bytes: new Uint8Array([1, 2, 3]).buffer as ArrayBuffer,
-    savedAt: '2025-04-01T00:00:00.000Z',
-  }
-
-  it('stores, lists and deletes a template', async () => {
-    await saveTemplate(template)
-    expect((await listTemplates()).map((t) => t.name)).toEqual(['القالب المعتمد'])
-
-    await deleteTemplate('default')
-    expect(await listTemplates()).toEqual([])
-  })
-
-  it('replaces a template saved under the same id', async () => {
-    await saveTemplate(template)
-    await saveTemplate({ ...template, name: 'نسخة محدّثة' })
-
-    const stored = await listTemplates()
-    expect(stored).toHaveLength(1)
-    expect(stored[0].name).toBe('نسخة محدّثة')
-  })
-})
