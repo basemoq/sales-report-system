@@ -3,15 +3,15 @@ import type { ReportIdentity } from '../core/dailyReport'
 interface Props {
   identity: ReportIdentity
   onChange: (identity: ReportIdentity) => void
-  /** What the stored template carries, offered as the ready choice. */
+  /** What the active template carries, offered as the ready value. */
   fromTemplate: Partial<ReportIdentity>
-  /** Names to choose from; the template's own value is always included. */
+  /** Suggested names; any other name can still be typed. */
   showrooms: readonly string[]
   supervisors: readonly string[]
 }
 
 /** Keeps the template's own value in the list, and never repeats a name. */
-const optionsFor = (choices: readonly string[], current: string | undefined) =>
+const suggestions = (choices: readonly string[], current: string | undefined) =>
   [...new Set([...(current ? [current] : []), ...choices])].filter((name) => name !== '')
 
 export function IdentityPanel({
@@ -21,47 +21,58 @@ export function IdentityPanel({
   showrooms,
   supervisors,
 }: Props) {
-  const showroomOptions = optionsFor(showrooms, fromTemplate.showroom)
-  const supervisorOptions = optionsFor(supervisors, fromTemplate.supervisor)
+  const fields: {
+    key: keyof ReportIdentity
+    label: string
+    placeholder: string
+    options: string[]
+  }[] = [
+    {
+      key: 'showroom',
+      label: 'إسم المعرض',
+      placeholder: 'مثال: الشرائع',
+      options: suggestions(showrooms, fromTemplate.showroom),
+    },
+    {
+      key: 'supervisor',
+      label: 'مشرف المعرض',
+      placeholder: 'اسم المشرف',
+      options: suggestions(supervisors, fromTemplate.supervisor),
+    },
+  ]
+
+  const missing = fields.filter((field) => identity[field.key].trim() === '')
 
   return (
     <section className="panel no-print">
       <h2>المعرض والمشرف</h2>
-      <p className="muted">
-        يُكتبان في رأس القالب. الافتراضي ما يحمله القالب المحفوظ.
-      </p>
+      <p className="muted">يُكتبان في رأس القالب. اكتب الاسم أو اختره من المقترحات.</p>
 
       <div className="fields">
-        <label>
-          <span>إسم المعرض</span>
-          <select
-            value={identity.showroom}
-            onChange={(event) => onChange({ ...identity, showroom: event.target.value })}
-          >
-            {showroomOptions.length === 0 && <option value="">— لا يوجد قالب محفوظ —</option>}
-            {showroomOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>مشرف المعرض</span>
-          <select
-            value={identity.supervisor}
-            onChange={(event) => onChange({ ...identity, supervisor: event.target.value })}
-          >
-            {supervisorOptions.length === 0 && <option value="">— لا يوجد قالب محفوظ —</option>}
-            {supervisorOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {fields.map((field) => (
+          <label key={field.key}>
+            <span>{field.label}</span>
+            <input
+              type="text"
+              list={`${field.key}-options`}
+              value={identity[field.key]}
+              placeholder={field.placeholder}
+              onChange={(event) => onChange({ ...identity, [field.key]: event.target.value })}
+            />
+            <datalist id={`${field.key}-options`}>
+              {field.options.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          </label>
+        ))}
       </div>
+
+      {missing.length > 0 && (
+        <p className="warn">
+          {`سيخرج التقرير بخانة «${missing.map((field) => field.label).join('» و«')}» فارغة.`}
+        </p>
+      )}
     </section>
   )
 }

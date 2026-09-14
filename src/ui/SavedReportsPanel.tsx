@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getActiveTemplate } from '../core/activeTemplate'
 import { fillDailyTemplate } from '../core/dailyReport'
 import { reviveSavedReport } from '../core/savedReport'
-import { deleteReport, getTemplate, listReports, type StoredReport } from '../db/store'
+import { deleteReport, listReports, type StoredReport } from '../db/store'
 import { formatMoney } from './format'
 
 interface Props {
@@ -33,12 +34,7 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
         return
       }
 
-      const template = await getTemplate('default')
-      if (template === undefined) {
-        setError('لا يوجد قالب محفوظ. ارفع القالب أولًا من قسم «القالب».')
-        return
-      }
-
+      const template = await getActiveTemplate()
       const result = await fillDailyTemplate(template.bytes, saved.figures, saved.identity)
       onDownload(result.bytes, `daily-sales-${saved.shopId ?? 'report'}-${report.id}.xlsx`)
     } catch (cause) {

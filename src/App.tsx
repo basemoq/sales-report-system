@@ -7,10 +7,10 @@ import {
   type ReportIdentity,
 } from './core/dailyReport'
 import type { DailyReportBuild } from './core/pipeline'
+import { getActiveTemplate } from './core/activeTemplate'
 import type { SavedReportData } from './core/savedReport'
 import {
   getReport,
-  getTemplate,
   recordIngestedFiles,
   ReportExistsError,
   saveReport,
@@ -68,8 +68,8 @@ export default function App() {
   const [savedCount, setSavedCount] = useState(0)
 
   const loadTemplateIdentity = useCallback(async () => {
-    const template = await getTemplate('default')
-    const fromTemplate = template ? await readTemplateIdentity(template.bytes) : {}
+    const template = await getActiveTemplate()
+    const fromTemplate = await readTemplateIdentity(template.bytes)
     setTemplateIdentity(fromTemplate)
     // Only seed the choice; a selection the operator already made stands.
     setIdentity((current) => ({
@@ -140,14 +140,7 @@ export default function App() {
   async function fillTemplate() {
     if (report === null || figures === null) return
     try {
-      const template = await getTemplate('default')
-      if (template === undefined) {
-        setFill({
-          kind: 'error',
-          message: 'لا يوجد قالب محفوظ. ارفع القالب أولًا من قسم «القالب».',
-        })
-        return
-      }
+      const template = await getActiveTemplate()
 
       const warnings: string[] = []
       if (report.shopId !== null) {

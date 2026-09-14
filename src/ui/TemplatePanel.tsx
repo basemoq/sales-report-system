@@ -76,17 +76,20 @@ export function TemplatePanel({ onTemplateChanged }: Props) {
 
       {stored ? (
         <p>
-          القالب المحفوظ: <strong>{stored.fileName}</strong>{' '}
+          القالب المستخدَم: <strong>{stored.fileName}</strong>{' '}
           <button type="button" className="link" onClick={() => remove(stored.id)}>
-            حذف
+            حذف والعودة للمدمج
           </button>
         </p>
       ) : (
-        <p className="muted">لا يوجد قالب محفوظ.</p>
+        <p className="muted">
+          يعمل التطبيق على <strong>القالب المدمج</strong> — جاهز على أي جهاز بلا رفع. ارفع ملفًا
+          هنا فقط إن أردت استخدام قالب مختلف.
+        </p>
       )}
 
       <label className="file-input">
-        <span>اختر ملف القالب (.xlsx)</span>
+        <span>استخدام قالب آخر (.xlsx)</span>
         <input type="file" accept=".xlsx" onChange={onPick} />
       </label>
 
