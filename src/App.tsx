@@ -207,6 +207,9 @@ export default function App() {
       )}
 
       <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
+
+      {/* Kept out of .no-print so it carries onto the employee report PDF. */}
+      <footer className="credit">© 2026 basem.alawalgy — جميع الحقوق محفوظة</footer>
     </div>
   )
 }

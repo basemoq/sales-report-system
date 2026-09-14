@@ -1,32 +1,42 @@
-# React + TypeScript + Vite
+# نظام تقارير المبيعات
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+يُعِدّ تقرير مبيعات المعارض اليومي من ملفات الأنظمة مباشرة: يُرفع تصدير CACO
+(المختصر والمفصّل) وتقرير TABS وإيصال موازنة مدى، فيتعرّف التطبيق على كل ملف من
+محتواه، ويملأ القالب اليومي، ويُخرج تقرير الموظفين.
 
-Currently, two official plugins are available:
+الموقع: <https://basemoq.github.io/sales-report-system/>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ما يميّزه
 
-## React Compiler
+- **يتعرّف على الملفات من محتواها** لا من أسمائها، فترتيب الرفع لا يهمّ.
+- **لا يكتب فوق معادلات القالب** — الإيداع النقدي وإجمالي المبيعات يحسبهما
+  القالب بنفسه.
+- **يتحقّق من الأرقام** بمقارنة المصادر ببعضها، ويحذّر عند أي اختلاف بدل أن
+  يُخرج رقمًا خاطئًا يبدو سليمًا.
+- **لا يغادر أي ملف جهازك.** كل المعالجة داخل المتصفح، ولا يُرسل شيء إلى أي
+  خادم.
+- **يعمل بدون إنترنت** بعد أول فتحة، وقابل للتثبيت على الجوال.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## التشغيل محليًا
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev     # تشغيل
+npm test        # الاختبارات
+npm run build   # بناء للنشر
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+يُنشر تلقائيًا على GitHub Pages عند كل دفعة إلى `main`، بعد فحص الأنواع ونجاح
+الاختبارات.
+
+## التوثيق
+
+[`docs/sources.md`](docs/sources.md) يوثّق بنية المصادر الأربعة وكل قاعدة مبنية
+عليها — اقرأه قبل أي تعديل يمسّ قراءة الملفات.
+
+## الحقوق
+
+© 2026 basem.alawalgy — جميع الحقوق محفوظة. البرنامج والقالب من عمله.
+
+الاستخدام مسموح لموظفي المعارض لأغراض العمل؛ والنسخ والتعديل وإعادة النشر ممنوع
+بلا إذن كتابي. التفاصيل في [`LICENSE`](LICENSE).
