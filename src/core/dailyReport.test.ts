@@ -303,6 +303,20 @@ describe('the showroom and supervisor', () => {
     expect((await reload(result.bytes)).getCell('B2').value).toBe('الشرائع')
   })
 
+  it('writes the shop code the sources came from', async () => {
+    const result = await fillDailyTemplate(await templateBytes(), FIGURES, {
+      shopId: 'WFW430',
+    })
+
+    expect((await reload(result.bytes)).getCell('D2').value).toBe('WFW430')
+  })
+
+  it('leaves the template shop code alone when the sources named none', async () => {
+    const result = await fillDailyTemplate(await templateBytes(), FIGURES, { shopId: null })
+
+    expect((await reload(result.bytes)).getCell('D2').value).toBe('FW430')
+  })
+
   it('trims the name it writes', async () => {
     const result = await fillDailyTemplate(await templateBytes(), FIGURES, {
       showroom: '  العزيزية  ',

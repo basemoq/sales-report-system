@@ -133,6 +133,12 @@ export interface ReportIdentity {
   supervisor: string
 }
 
+/** The header the template carries above its figures. */
+export interface TemplateHeader extends Partial<ReportIdentity> {
+  /** Written into `كود المعرض`; read from the sources rather than chosen. */
+  shopId?: string | null
+}
+
 /** The showroom and supervisor the template already carries. */
 export async function readTemplateIdentity(
   templateBytes: ArrayBuffer,
@@ -212,7 +218,7 @@ function findColumn(
 export async function fillDailyTemplate(
   templateBytes: ArrayBuffer,
   figures: DailyFigures,
-  identity: Partial<ReportIdentity> = {},
+  header: TemplateHeader = {},
 ): Promise<FillResult> {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(templateBytes)
@@ -283,13 +289,14 @@ export async function fillDailyTemplate(
     else write(dateLabel.row, dateLabel.column + 1, figures.date)
   }
 
-  // Left as the template has them when the operator did not choose.
-  const identityTargets: [string | undefined, string[], string][] = [
-    [identity.showroom, SHOWROOM_LABEL, 'إسم المعرض'],
-    [identity.supervisor, SUPERVISOR_LABEL, 'مشرف المعرض'],
+  // Left as the template has them when there is nothing to write.
+  const headerTargets: [string | null | undefined, string[], string][] = [
+    [header.showroom, SHOWROOM_LABEL, 'إسم المعرض'],
+    [header.supervisor, SUPERVISOR_LABEL, 'مشرف المعرض'],
+    [header.shopId, SHOP_CODE_LABEL, 'كود المعرض'],
   ]
-  for (const [value, labels, name] of identityTargets) {
-    if (value === undefined || value.trim() === '') continue
+  for (const [value, labels, name] of headerTargets) {
+    if (value === undefined || value === null || value.trim() === '') continue
     const label = findColumn(sheet, labels)
     if (label === null) warnings.push(`لم يُعثر في القالب على خانة «${name}».`)
     else write(label.row, label.column + 1, value.trim())

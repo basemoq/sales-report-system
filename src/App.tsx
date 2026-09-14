@@ -152,7 +152,10 @@ export default function App() {
         }
       }
 
-      const result = await fillDailyTemplate(template.bytes, figures, identity)
+      const result = await fillDailyTemplate(template.bytes, figures, {
+        ...identity,
+        shopId: report.shopId,
+      })
       // ASCII: a non-Latin download name is dropped by some browsers and by
       // Windows shares, leaving an extension-less "download" the user cannot open.
       download(result.bytes, `daily-sales-${report.shopId ?? 'report'}-${report.reportId}.xlsx`)

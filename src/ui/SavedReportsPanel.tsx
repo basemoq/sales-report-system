@@ -35,7 +35,10 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
       }
 
       const template = await getActiveTemplate()
-      const result = await fillDailyTemplate(template.bytes, saved.figures, saved.identity)
+      const result = await fillDailyTemplate(template.bytes, saved.figures, {
+        ...saved.identity,
+        shopId: saved.shopId,
+      })
       onDownload(result.bytes, `daily-sales-${saved.shopId ?? 'report'}-${report.id}.xlsx`)
     } catch (cause) {
       setError((cause as Error).message)
