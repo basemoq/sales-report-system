@@ -8,6 +8,20 @@ const EXCEL_LEAP_BUG_SERIAL = 60
 const ISO_DATE = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/
 /** Day-first: the ordering used by the source reports (31/12/2025). */
 const DAY_FIRST = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/
+/** `13-Sep-2026`, as the CACO detailed export writes its Date column. */
+const DAY_MONTH_NAME = /^(\d{1,2})[\s/.-]([A-Za-z]{3,})[\s/.-](\d{4})$/
+/** `Sep 13,2026 00:00`, as the CACO parameter band writes its date range. */
+const MONTH_NAME_DAY = /^([A-Za-z]{3,})\s+(\d{1,2}),?\s*(\d{4})(?:\s+\d{1,2}:\d{2}.*)?$/
+
+const MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+}
+
+/** Matches on the first three letters, so `Sep` and `September` both resolve. */
+function monthNumber(name: string): number | undefined {
+  return MONTHS[name.slice(0, 3).toLowerCase()]
+}
 
 function utcDate(year: number, month: number, day: number): Date | null {
   const d = new Date(Date.UTC(year, month - 1, day))
@@ -43,6 +57,22 @@ export function parseDateCell(value: unknown): Date | null {
 
     const dayFirst = DAY_FIRST.exec(text)
     if (dayFirst) return utcDate(Number(dayFirst[3]), Number(dayFirst[2]), Number(dayFirst[1]))
+
+    const dayMonthName = DAY_MONTH_NAME.exec(text)
+    if (dayMonthName) {
+      const month = monthNumber(dayMonthName[2])
+      if (month !== undefined) {
+        return utcDate(Number(dayMonthName[3]), month, Number(dayMonthName[1]))
+      }
+    }
+
+    const monthNameDay = MONTH_NAME_DAY.exec(text)
+    if (monthNameDay) {
+      const month = monthNumber(monthNameDay[1])
+      if (month !== undefined) {
+        return utcDate(Number(monthNameDay[3]), month, Number(monthNameDay[2]))
+      }
+    }
 
     // A serial that survived export as text.
     if (/^\d+(\.\d+)?$/.test(text)) return excelSerialToDate(Number(text))

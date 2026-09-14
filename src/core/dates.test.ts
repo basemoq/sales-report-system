@@ -29,6 +29,23 @@ describe('parseDateCell', () => {
     expect(iso('2025-03-09T14:30:00')).toBe('2025-03-09')
   })
 
+  it('reads the day-month-name form the CACO detailed export writes', () => {
+    expect(iso('13-Sep-2026')).toBe('2026-09-13')
+    expect(iso('1-Jan-2026')).toBe('2026-01-01')
+    expect(iso('13 September 2026')).toBe('2026-09-13')
+  })
+
+  it('reads the month-name-day form the CACO parameter band writes', () => {
+    expect(iso('Sep 13,2026 00:00')).toBe('2026-09-13')
+    expect(iso('Sep 13, 2026')).toBe('2026-09-13')
+    expect(iso('September 13,2026 23:59')).toBe('2026-09-13')
+  })
+
+  it('rejects text naming a month that does not exist', () => {
+    expect(parseDateCell('13-Xyz-2026')).toBeNull()
+    expect(parseDateCell('Foo 13,2026')).toBeNull()
+  })
+
   it('reads an Excel serial, as a number and as exported text', () => {
     expect(iso(45725)).toBe('2025-03-09')
     expect(iso('45725')).toBe('2025-03-09')
