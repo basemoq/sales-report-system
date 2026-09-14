@@ -146,12 +146,24 @@ export function parseMadaReconciliation(
   for (const scheme of schemes) {
     const key = labelKey(scheme.scheme)
     if (key === 'mada') cards.mada += scheme.amount
-    else if (key === 'visa') cards.visa += scheme.amount
     else if (key === 'mc' || key === 'mastercard') cards.mastercard += scheme.amount
-    else if (scheme.amount !== 0) unmapped.push(scheme)
+    else if (key !== 'visa' && scheme.amount !== 0) unmapped.push(scheme)
   }
 
+  // The receipt prints two sections headed for Visa. The first is the terminal's
+  // MasterCard slot, which it mislabels; the last is the real Visa.
   const visaSections = schemes.filter((scheme) => labelKey(scheme.scheme) === 'visa')
+  const [firstVisa, ...laterVisa] = visaSections
+  const laterVisaTotal = laterVisa.reduce((sum, section) => sum + section.amount, 0)
+
+  const bothSettled = visaSections.length > 1 && firstVisa.amount > 0 && laterVisaTotal > 0
+
+  if (bothSettled) {
+    cards.mastercard += firstVisa.amount
+    cards.visa += laterVisaTotal
+  } else {
+    cards.visa += visaSections.reduce((sum, section) => sum + section.amount, 0)
+  }
 
   return {
     terminalDate: parseDateCell(findTerminalDate(ordered)),
@@ -159,10 +171,10 @@ export function parseMadaReconciliation(
     cards,
     unmapped,
     totalsMatched: ordered.some((item) => labelKey(item.text) === TOTALS_MATCHED),
+    // Only the first slot settled: it could be either card, and nothing on the
+    // receipt says which.
     visaMayBeMastercard:
-      visaSections.length > 1 &&
-      visaSections[0].amount > 0 &&
-      visaSections.slice(1).every((section) => section.amount === 0),
+      visaSections.length > 1 && firstVisa.amount > 0 && laterVisaTotal === 0,
   }
 }
 

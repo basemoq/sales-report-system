@@ -77,14 +77,27 @@ describe('parseMadaReconciliation', () => {
     expect(report.cards.visa).toBe(0)
   })
 
-  it('adds both Visa sections into the one Visa column', () => {
+  it('splits two settled Visa sections: the first is the MasterCard slot', () => {
     const report = parseMadaReconciliation([
       ...head(),
       ...scheme(900, 'visa', 3, '590.59'),
       ...scheme(500, 'VISA', 1, '100.00'),
     ])
 
-    expect(report.cards.visa).toBeCloseTo(690.59, 2)
+    expect(report.cards.mastercard).toBeCloseTo(590.59, 2)
+    expect(report.cards.visa).toBeCloseTo(100, 2)
+  })
+
+  it('adds a split first slot to a MasterCard section the receipt also printed', () => {
+    const report = parseMadaReconciliation([
+      ...head(),
+      ...scheme(900, 'visa', 3, '590.59'),
+      ...scheme(600, 'VISA', 1, '100.00'),
+      ...scheme(300, 'MC', 1, '37.26'),
+    ])
+
+    expect(report.cards.mastercard).toBeCloseTo(627.85, 2)
+    expect(report.cards.visa).toBeCloseTo(100, 2)
   })
 
   it('surfaces a scheme with money on it that no column covers', () => {
@@ -150,6 +163,7 @@ describe('parseMadaReconciliation', () => {
     })
 
     it('does not flag a receipt where both visa sections carry money', () => {
+      // Both settled, so the split is unambiguous and needs no decision.
       const report = parseMadaReconciliation([
         ...head(),
         ...scheme(900, 'visa', 3, '590.59'),
@@ -157,6 +171,19 @@ describe('parseMadaReconciliation', () => {
       ])
 
       expect(report.visaMayBeMastercard).toBe(false)
+      expect(report.cards).toEqual({ mada: 0, visa: 100, mastercard: 590.59 })
+    })
+
+    it('puts the money in Visa when only the last section settled', () => {
+      const report = parseMadaReconciliation([
+        ...head(),
+        ...emptyScheme(900, 'visa'),
+        ...scheme(500, 'VISA', 1, '100.00'),
+      ])
+
+      expect(report.visaMayBeMastercard).toBe(false)
+      expect(report.cards.visa).toBe(100)
+      expect(report.cards.mastercard).toBe(0)
     })
 
     it('does not flag a receipt with no visa money at all', () => {
