@@ -1,33 +1,58 @@
-import { reportIdFromDates, periodKey } from './dates'
+import { buildDailyFigures, type DailyFigures } from './dailyReport'
+import { periodKey, toISODate } from './dates'
 import { deduplicateByHash, type DuplicateHit } from './dedupe'
 import { summarizeEmployees } from './employees'
 import { sha256Hex } from './hash'
-import type { EmployeeSummary, LocationSummary, SalesRecord } from './model'
-import { ingestShoorFiles, type RowProblem, type ShoorFile } from './sources/shoor'
-import { readWorkbook } from './workbook'
+import type { EmployeeSummary } from './model'
+import { extractPdfText, type PdfTextItem } from './pdf'
+import {
+  checkDetailedTotal,
+  isCacoDetailed,
+  isCacoSummary,
+  parseCacoDetailed,
+  parseCacoSummary,
+  type CacoDetailed,
+  type CacoSummary,
+} from './sources/caco'
+import { parseMadaReconciliation, type MadaReconciliation } from './sources/mada'
+import { parseTabsReport, type TabsReport } from './sources/tabs'
+import { readWorkbook, type SheetData } from './workbook'
 
 export interface UploadedFile {
   fileName: string
   bytes: ArrayBuffer
 }
 
+export type SourceKind = 'caco-summary' | 'caco-detailed' | 'tabs' | 'mada'
+
+export interface RecognisedSource {
+  fileName: string
+  hash: string
+  kind: SourceKind
+}
+
+export interface UnrecognisedFile {
+  fileName: string
+  hash: string
+  reason: string
+}
+
 interface FingerprintedFile extends UploadedFile {
   hash: string
 }
 
-export interface BuiltReport {
-  /** The latest date the data covers; the report's identity. */
+export interface DailyReportBuild {
+  /** The day the report covers, `YYYY-MM-DD`; also its identity. */
   reportId: string
   periodKey: string
-  locations: LocationSummary[]
+  /** The shop the sources belong to, for checking the template matches. */
+  shopId: string | null
+  figures: DailyFigures
   employees: EmployeeSummary[]
-  records: SalesRecord[]
-  /** Files skipped because their bytes were already accounted for. */
+  sources: RecognisedSource[]
+  unrecognised: UnrecognisedFile[]
   duplicates: DuplicateHit<FingerprintedFile>[]
-  /** Rows that could not be read, by file. */
-  problems: RowProblem[]
-  /** Fingerprints of the files that were actually ingested. */
-  ingested: { hash: string; fileName: string }[]
+  warnings: string[]
 }
 
 export class NoDataError extends Error {
@@ -37,15 +62,77 @@ export class NoDataError extends Error {
   }
 }
 
+const isPdf = (bytes: ArrayBuffer) => {
+  const head = new Uint8Array(bytes.slice(0, 5))
+  return head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46
+}
+
+interface Recognised {
+  file: FingerprintedFile
+  kind: SourceKind
+  sheets?: SheetData[]
+  items?: PdfTextItem[]
+}
+
 /**
- * Turns a batch of uploads into a report: fingerprint, drop bytes already
- * ingested, read, then aggregate. A location conflict inside the batch throws
- * out of `ingestShoorFiles`, so nothing is produced from a contradictory upload.
+ * Works out what each upload is from its content rather than its name, since
+ * these exports are named by the moment they were generated.
  */
-export async function buildReport(
+async function recognise(
+  file: FingerprintedFile,
+): Promise<Recognised | { file: FingerprintedFile; reason: string }> {
+  if (isPdf(file.bytes)) {
+    let items: PdfTextItem[]
+    try {
+      items = await extractPdfText(file.bytes)
+    } catch (cause) {
+      // A damaged file must not sink the rest of the batch.
+      return { file, reason: `تعذّرت قراءة ملف PDF: ${(cause as Error).message}` }
+    }
+
+    // Each PDF parser rejects a file that is not its own report.
+    try {
+      parseTabsReport(items)
+      return { file, kind: 'tabs', items }
+    } catch {
+      /* not a TABS export */
+    }
+    try {
+      parseMadaReconciliation(items)
+      return { file, kind: 'mada', items }
+    } catch {
+      /* not a mada receipt */
+    }
+    return {
+      file,
+      reason: 'ملف PDF غير معروف — ليس تقرير TABS ولا إيصال موازنة مدى.',
+    }
+  }
+
+  let sheets: SheetData[]
+  try {
+    sheets = await readWorkbook(file.fileName, file.bytes)
+  } catch (cause) {
+    return { file, reason: (cause as Error).message }
+  }
+
+  if (isCacoSummary(sheets)) return { file, kind: 'caco-summary', sheets }
+  if (isCacoDetailed(sheets)) return { file, kind: 'caco-detailed', sheets }
+  return {
+    file,
+    reason: 'ملف Excel غير معروف — ليس تقرير CACO مختصرًا ولا مفصّلًا.',
+  }
+}
+
+/**
+ * Turns a day's uploads into the figures the template carries, plus the
+ * employee breakdown. Files already ingested are skipped, and a file that is
+ * none of the four known reports is reported rather than guessed at.
+ */
+export async function buildDailyReport(
   files: readonly UploadedFile[],
   storedHashes: ReadonlyMap<string, string> = new Map(),
-): Promise<BuiltReport> {
+): Promise<DailyReportBuild> {
   const fingerprinted: FingerprintedFile[] = await Promise.all(
     files.map(async (file) => ({ ...file, hash: await sha256Hex(file.bytes) })),
   )
@@ -55,30 +142,119 @@ export async function buildReport(
     throw new NoDataError('كل الملفات المرفوعة سبق إدخالها؛ لا يوجد جديد لمعالجته.')
   }
 
-  const parsed: ShoorFile[] = await Promise.all(
-    unique.map(async (file) => ({
-      fileName: file.fileName,
-      sheets: await readWorkbook(file.fileName, file.bytes),
-    })),
-  )
+  const outcomes = await Promise.all(unique.map(recognise))
 
-  const { records, locations, problems } = ingestShoorFiles(parsed)
+  const sources: RecognisedSource[] = []
+  const unrecognised: UnrecognisedFile[] = []
+  const warnings: string[] = []
 
-  const reportId = reportIdFromDates(records.map((record) => record.date))
-  if (reportId === null) {
-    throw new NoDataError('لم يُعثر على أي صف يحمل تاريخًا صالحًا في الملفات المرفوعة.')
+  let caco: CacoSummary | undefined
+  let detailed: CacoDetailed | undefined
+  let tabs: TabsReport | undefined
+  let mada: MadaReconciliation | undefined
+
+  for (const outcome of outcomes) {
+    if (!('kind' in outcome)) {
+      unrecognised.push({
+        fileName: outcome.file.fileName,
+        hash: outcome.file.hash,
+        reason: outcome.reason,
+      })
+      continue
+    }
+
+    sources.push({ fileName: outcome.file.fileName, hash: outcome.file.hash, kind: outcome.kind })
+
+    switch (outcome.kind) {
+      case 'caco-summary':
+        caco = parseCacoSummary(outcome.sheets!)
+        break
+      case 'caco-detailed':
+        detailed = parseCacoDetailed(outcome.sheets!)
+        break
+      case 'tabs':
+        tabs = parseTabsReport(outcome.items!)
+        break
+      case 'mada':
+        mada = parseMadaReconciliation(outcome.items!)
+        break
+    }
   }
 
-  const latest = records.reduce((max, r) => (r.date > max ? r.date : max), records[0].date)
+  if (caco === undefined && detailed === undefined && tabs === undefined && mada === undefined) {
+    throw new NoDataError('لم يُتعرَّف على أي ملف من الملفات المرفوعة.')
+  }
+
+  // The BSS rows come from the summary: only it breaks the day down by order
+  // type, which is what those rows are.
+  const figures = buildDailyFigures({ caco, tabs, mada })
+
+  if (caco === undefined) warnings.push('لم يُرفع تقرير CACO المختصر؛ صفوف BSS ستبقى أصفارًا.')
+  if (tabs === undefined) warnings.push('لم يُرفع تقرير TABS؛ صفوف TABS ستبقى أصفارًا.')
+  if (mada === undefined) warnings.push('لم يُرفع إيصال موازنة مدى؛ صف البطاقات سيبقى أصفارًا.')
+
+  warnings.push(...crossCheck(caco, detailed))
+
+  if (mada?.totalsMatched === false) {
+    warnings.push('إيصال مدى لا يُظهر تطابق المجاميع (TotalsMatched).')
+  }
+  for (const scheme of mada?.unmapped ?? []) {
+    warnings.push(
+      `إيصال مدى يحتوي على شبكة «${scheme.scheme}» بمبلغ ${scheme.amount} لا يقابلها عمود في القالب.`,
+    )
+  }
+
+  const date = figures.date ?? detailed?.parameters.from
+  if (!date) {
+    throw new NoDataError('تعذّر تحديد تاريخ التقرير من الملفات المرفوعة.')
+  }
 
   return {
-    reportId,
-    periodKey: periodKey(latest),
-    locations,
-    employees: summarizeEmployees(records),
-    records,
+    reportId: toISODate(date),
+    periodKey: periodKey(date),
+    shopId:
+      caco?.parameters.shopId ?? detailed?.parameters.shopId ?? tabs?.warehouse ?? null,
+    figures,
+    employees: summarizeEmployees(detailed?.transactions ?? []),
+    sources,
+    unrecognised,
     duplicates,
-    problems,
-    ingested: unique.map(({ hash, fileName }) => ({ hash, fileName })),
+    warnings,
   }
+}
+
+/**
+ * The two CACO exports describe the same day from different angles, so their
+ * totals must agree. A gap means one of them was run over a different range.
+ */
+function crossCheck(caco?: CacoSummary, detailed?: CacoDetailed): string[] {
+  const warnings: string[] = []
+
+  if (detailed) {
+    const check = checkDetailedTotal(detailed)
+    if (!check.ok) {
+      warnings.push(
+        `تقرير CACO المفصّل: مجموع الصفوف ${check.summed.toFixed(2)} لا يطابق الإجمالي المطبوع ${check.reported?.toFixed(2)}.`,
+      )
+    }
+    if (detailed.skippedRows > 0) {
+      warnings.push(`تقرير CACO المفصّل: تعذّرت قراءة ${detailed.skippedRows} صف.`)
+    }
+  }
+
+  if (caco && detailed) {
+    const summed = detailed.transactions.reduce((sum, t) => sum + t.amount, 0)
+    if (Math.abs(summed - caco.grandTotal) > 0.01) {
+      warnings.push(
+        `إجمالي CACO المختصر ${caco.grandTotal.toFixed(2)} لا يطابق مجموع المفصّل ${summed.toFixed(2)}.`,
+      )
+    }
+    if (caco.parameters.shopId !== detailed.parameters.shopId) {
+      warnings.push(
+        `الملفان يخصان فرعين مختلفين: ${caco.parameters.shopId} و ${detailed.parameters.shopId}.`,
+      )
+    }
+  }
+
+  return warnings
 }

@@ -1,15 +1,3 @@
-export interface SalesRecord {
-  /** UTC midnight of the day the sale belongs to. */
-  date: Date
-  shopId: string
-  locationName: string
-  employee: string | null
-  amount: number
-  /** Checks the row stands for; 1 unless the source reports a count. */
-  transactions: number
-  sourceFile: string
-}
-
 export interface DayDetail {
   /** `YYYY-MM-DD`. */
   date: string
@@ -17,20 +5,36 @@ export interface DayDetail {
   transactions: number
 }
 
-export interface LocationSummary {
-  shopId: string
-  locationName: string
+export interface EmployeeSummary {
+  /** The login the transaction was recorded under. */
+  userId: string
+  fullName: string | null
+  shopId: string | null
   total: number
   transactions: number
-  /** Every day the location has records for, ascending. */
+  /** Amount settled per payment method, as the export names them. */
+  byPaymentMethod: Record<string, number>
   days: DayDetail[]
 }
 
-export interface EmployeeSummary {
-  employee: string
-  shopId: string
-  locationName: string
-  total: number
-  transactions: number
-  days: DayDetail[]
+/** Day-by-day totals, ascending, one transaction per entry. */
+export function summarizeDays(
+  entries: readonly { date: Date; amount: number }[],
+): DayDetail[] {
+  const byDay = new Map<string, DayDetail>()
+
+  for (const entry of entries) {
+    const key = entry.date.toISOString().slice(0, 10)
+    const day = byDay.get(key)
+    if (day) {
+      day.amount += entry.amount
+      day.transactions += 1
+    } else {
+      byDay.set(key, { date: key, amount: entry.amount, transactions: 1 })
+    }
+  }
+
+  return [...byDay.values()]
+    .map((day) => ({ ...day, amount: Math.round(day.amount * 100) / 100 }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
