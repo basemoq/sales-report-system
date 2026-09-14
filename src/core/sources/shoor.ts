@@ -49,6 +49,19 @@ export class MissingLocationError extends Error {
   }
 }
 
+/** Labels that mark the summary band every export closes a table with. */
+const TOTAL_LABELS = [
+  'الإجمالي',
+  'المجموع',
+  'إجمالي',
+  'المجموع الكلي',
+  'Total',
+  'Grand Total',
+  'Subtotal',
+  'Sum',
+]
+const TOTAL_KEYS = new Set(TOTAL_LABELS.map(matchKey))
+
 const SHOP_ID_LABELS = ['Shop ID', 'ShopID', 'Shop No', 'رقم الفرع', 'رقم الموقع', 'كود الفرع']
 const LOCATION_LABELS = ['Location', 'Shop Name', 'الموقع', 'اسم الموقع', 'الفرع', 'اسم الفرع']
 
@@ -131,9 +144,12 @@ function readRecords(file: ShoorFile, identity: LocationIdentity, problems: RowP
       const amount = parseNumber(cellAt(row, header, 'amount'))
 
       if (date === null) {
-        // Total and subtotal bands carry an amount but no date; skip them quietly
-        // only when they also carry no other row content worth reporting.
-        if (amount !== null) {
+        // Every export closes with a labelled totals band; anything else that
+        // carries an amount but no date is a row we failed to read.
+        const labelled = row.some(
+          (cell) => typeof cell === 'string' && TOTAL_KEYS.has(matchKey(cell)),
+        )
+        if (amount !== null && !labelled) {
           problems.push({ fileName: file.fileName, rowNumber, reason: 'تاريخ غير صالح' })
         }
         continue

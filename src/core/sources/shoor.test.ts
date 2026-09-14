@@ -214,11 +214,33 @@ describe('ingestShoorFiles', () => {
     ).toThrow(LocationConflictError)
   })
 
-  it('skips a totals band that has an amount but no date, and reports it', () => {
+  it('skips the labelled totals band without reporting it', () => {
     const result = ingestShoorFiles([
       shoorFile('a.xlsx', { shopId: '101', location: 'الرياض' }, [
         ['2025-03-01', 100, 'أ', 1],
         ['الإجمالي', 100, null, null],
+      ]),
+    ])
+
+    expect(result.locations[0].total).toBe(100)
+    expect(result.problems).toEqual([])
+  })
+
+  it.each(['المجموع', 'Total', 'الاجمالي'])('recognises "%s" as a totals band', (label) => {
+    const result = ingestShoorFiles([
+      shoorFile('a.xlsx', { shopId: '101', location: 'الرياض' }, [
+        ['2025-03-01', 100, 'أ', 1],
+        [label, 100, null, null],
+      ]),
+    ])
+    expect(result.problems).toEqual([])
+  })
+
+  it('reports an unlabelled row that has an amount but no date', () => {
+    const result = ingestShoorFiles([
+      shoorFile('a.xlsx', { shopId: '101', location: 'الرياض' }, [
+        ['2025-03-01', 100, 'أ', 1],
+        ['٣٢/٠٣/٢٠٢٥', 250, 'أ', 1],
       ]),
     ])
 
