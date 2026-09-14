@@ -46,8 +46,9 @@ const DETAILED_HEADER = [
   'Receipt No', 'Amount', 'Payment Method', 'Payment Order type/Description',
 ]
 
+/** A row is [user, amount, payment method, order description]. */
 const cacoDetailed = (
-  transactions: [string, number, string][] = [
+  transactions: [string, number, string, string?][] = [
     ['mansour.alremy', 1610.39, 'SPAN Offline'],
     ['Basem.Alawalgy', 2513.75, 'Cash'],
   ],
@@ -58,10 +59,10 @@ const cacoDetailed = (
     sheet.getCell('A1').value = 'Finance CACO report (detailed)'
     parameterBand(sheet)
     sheet.getRow(12).values = DETAILED_HEADER
-    transactions.forEach(([userId, amount, method], index) => {
+    transactions.forEach(([userId, amount, method, description], index) => {
       sheet.getRow(13 + index).values = [
         userId, userId, 'Hussain.Khorma', 'WFW430', '5:38 PM', '13-Sep-2026',
-        `ZN_${index}`, amount, method, 'Setup Fee',
+        `ZN_${index}`, amount, method, description ?? 'Setup Fee',
       ]
     })
     if (total !== null) {
@@ -113,12 +114,40 @@ describe('buildDailyReport', () => {
     ])
   })
 
-  it('warns about each source that was not uploaded', async () => {
+  it('lists the sources that were not uploaded without treating them as faults', async () => {
     const report = await buildDailyReport([await cacoSummary()])
-    const warnings = report.warnings.join(' ')
 
-    expect(warnings).toContain('TABS')
-    expect(warnings).toContain('مدى')
+    expect(report.missingSources).toEqual(['TABS', 'موازنة مدى'])
+    expect(report.warnings).toEqual([])
+  })
+
+  it('completes without TABS, counting it as zero', async () => {
+    const report = await buildDailyReport([await cacoSummary()])
+
+    expect(report.figures.tabs).toEqual({ billPayment: 0, ordering: 0, cashCollection: 0 })
+    expect(report.figures.totalSales).toBe(4124.14)
+    expect(report.reportId).toBe('2026-09-13')
+  })
+
+  it('reports the sales from the detailed export when no summary was uploaded', async () => {
+    const report = await buildDailyReport([
+      await cacoDetailed(
+        [
+          ['someone', 2289.98, 'Cash', 'Invoice Payment'],
+          ['someone', 423, 'Cash', 'Top Up'],
+          ['someone', 1411.16, 'Cash', 'Flex 109"Add/Remove Add-On"'],
+        ],
+        4124.14,
+      ),
+    ])
+
+    expect(report.figures.bss).toEqual({
+      billPayment: 2289.98,
+      ordering: 1411.16,
+      cashSales: 423,
+    })
+    expect(report.figures.date).not.toBeNull()
+    expect(report.missingSources).toEqual(['TABS', 'موازنة مدى'])
   })
 
   it('warns when the two CACO exports disagree on the day total', async () => {

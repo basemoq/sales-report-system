@@ -57,6 +57,8 @@ export interface DailyReportBuild {
   sources: RecognisedSource[]
   unrecognised: UnrecognisedFile[]
   duplicates: DuplicateHit<FingerprintedFile>[]
+  /** Sources this upload did not include; each simply counts as zero. */
+  missingSources: string[]
   warnings: string[]
 }
 
@@ -190,13 +192,14 @@ export async function buildDailyReport(
     throw new NoDataError('لم يُتعرَّف على أي ملف من الملفات المرفوعة.')
   }
 
-  // The BSS rows come from the summary: only it breaks the day down by order
-  // type, which is what those rows are.
-  const figures = buildDailyFigures({ caco, tabs, mada })
+  // The BSS rows come from the summary, or from the detailed export when only
+  // that was uploaded — both describe the same split.
+  const figures = buildDailyFigures({ caco, detailed, tabs, mada })
 
-  if (caco === undefined) warnings.push('لم يُرفع تقرير CACO المختصر؛ صفوف BSS ستبقى أصفارًا.')
-  if (tabs === undefined) warnings.push('لم يُرفع تقرير TABS؛ صفوف TABS ستبقى أصفارًا.')
-  if (mada === undefined) warnings.push('لم يُرفع إيصال موازنة مدى؛ صف البطاقات سيبقى أصفارًا.')
+  const missingSources: string[] = []
+  if (caco === undefined && detailed === undefined) missingSources.push('CACO')
+  if (tabs === undefined) missingSources.push('TABS')
+  if (mada === undefined) missingSources.push('موازنة مدى')
 
   warnings.push(...crossCheck(caco, detailed))
 
@@ -209,7 +212,7 @@ export async function buildDailyReport(
     )
   }
 
-  const date = figures.date ?? detailed?.parameters.from
+  const date = figures.date
   if (!date) {
     throw new NoDataError('تعذّر تحديد تاريخ التقرير من الملفات المرفوعة.')
   }
@@ -225,6 +228,7 @@ export async function buildDailyReport(
     sources,
     unrecognised,
     duplicates,
+    missingSources,
     warnings,
   }
 }

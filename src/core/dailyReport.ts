@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { CacoSummary } from './sources/caco'
+import type { CacoDetailed, CacoSummary } from './sources/caco'
 import type { CardTotals, MadaReconciliation } from './sources/mada'
 import type { TabsReport, TabsTotals } from './sources/tabs'
 import { matchKey } from './text'
@@ -23,6 +23,8 @@ export interface DailyFigures {
 
 export interface DailySources {
   caco?: CacoSummary
+  /** Stands in for the summary when only the detailed export was uploaded. */
+  detailed?: CacoDetailed
   tabs?: TabsReport
   mada?: MadaReconciliation
 }
@@ -48,6 +50,37 @@ function bssFromCaco(caco: CacoSummary): BssTotals {
 }
 
 /**
+ * Order types the detailed export names outright in its description column.
+ * A sales order is described by what was sold instead, so every other
+ * description is one — which is what makes the split derivable at all.
+ */
+const NAMED_ORDER_TYPES = new Map<string, keyof BssTotals | null>([
+  [matchKey('Invoice Payment'), 'billPayment'],
+  [matchKey('Top Up'), 'cashSales'],
+  // Summary rows of their own, and no row in the template.
+  [matchKey('Refund'), null],
+  [matchKey('EVD Voucher'), null],
+])
+
+/**
+ * The same split the summary reports, recovered from the per-transaction export
+ * so a day can be reported from it alone. Verified against a real pair: all
+ * three figures match the summary to the halala.
+ */
+function bssFromDetailed(detailed: CacoDetailed): BssTotals {
+  const totals: BssTotals = { billPayment: 0, ordering: 0, cashSales: 0 }
+
+  for (const transaction of detailed.transactions) {
+    const described = matchKey((transaction.orderType ?? '').trim())
+    const named = NAMED_ORDER_TYPES.get(described)
+    if (named === null) continue
+    totals[named ?? 'ordering'] += transaction.amount
+  }
+
+  return totals
+}
+
+/**
  * Money is carried to halalas. Summing raw floats leaves artefacts like
  * 1411.1599999999999, which would be written into the sheet as-is.
  */
@@ -61,8 +94,14 @@ const roundAll = <T extends object>(totals: T): T =>
 /** Combines the day's three sources into the figures the template carries. */
 export function buildDailyFigures(sources: DailySources): DailyFigures {
   const tabs = roundAll(sources.tabs?.totals ?? ZERO_TABS)
-  const bss = roundAll(sources.caco ? bssFromCaco(sources.caco) : ZERO_BSS)
   const cards = roundAll(sources.mada?.cards ?? ZERO_CARDS)
+  const bss = roundAll(
+    sources.caco
+      ? bssFromCaco(sources.caco)
+      : sources.detailed
+        ? bssFromDetailed(sources.detailed)
+        : ZERO_BSS,
+  )
 
   // Totalled from the rounded parts, so this matches the template's own SUM.
   const totalSales = round2(
@@ -75,7 +114,11 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
   )
 
   return {
-    date: sources.caco?.parameters.from ?? sources.mada?.terminalDate ?? null,
+    date:
+      sources.caco?.parameters.from ??
+      sources.detailed?.parameters.from ??
+      sources.mada?.terminalDate ??
+      null,
     tabs,
     bss,
     cards,

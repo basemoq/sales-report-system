@@ -17,6 +17,7 @@ export function UploadPanel({ onBuilt }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recognised, setRecognised] = useState<string[]>([])
+  const [missing, setMissing] = useState<string[]>([])
   const [notices, setNotices] = useState<string[]>([])
 
   async function onPick(event: ChangeEvent<HTMLInputElement>) {
@@ -28,6 +29,7 @@ export function UploadPanel({ onBuilt }: Props) {
     setBusy(true)
     setError(null)
     setRecognised([])
+    setMissing([])
     setNotices([])
 
     try {
@@ -39,6 +41,7 @@ export function UploadPanel({ onBuilt }: Props) {
       setRecognised(
         report.sources.map((source) => `${source.fileName} → ${KIND_LABELS[source.kind]}`),
       )
+      setMissing(report.missingSources)
       setNotices([
         ...report.duplicates.map(
           (hit) =>
@@ -87,6 +90,12 @@ export function UploadPanel({ onBuilt }: Props) {
             </li>
           ))}
         </ul>
+      )}
+
+      {missing.length > 0 && (
+        <p className="muted">
+          لم تُرفع: {missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.
+        </p>
       )}
 
       {notices.length > 0 && (

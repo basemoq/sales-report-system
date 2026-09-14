@@ -7,7 +7,7 @@ import {
   TemplateFillError,
   type DailyFigures,
 } from './dailyReport'
-import type { CacoSummary } from './sources/caco'
+import type { CacoDetailed, CacoSummary } from './sources/caco'
 import type { MadaReconciliation } from './sources/mada'
 import type { TabsReport } from './sources/tabs'
 
@@ -37,6 +37,38 @@ const mada = (
   unmapped: [],
   totalsMatched: true,
   visaMayBeMastercard: false,
+})
+
+/** The real Sep 13 file, reduced to the column the split is derived from. */
+const DETAILED_ROWS: [string, number][] = [
+  ['Invoice Payment', 2289.98],
+  ['Top Up', 423],
+  ['Flex 109"Add/Remove Add-On - Order Entry"', 376.05],
+  ['Setup Fee Prepaid', 350.85],
+  ['"Change Plan Restriction Service"', 519],
+  ['Social Media Unlimited', 105.01],
+  ['SIM Replacement Fee"SIM Replacement - Order Entry"', 40.25],
+  ['Setup Fee (MultiSim)', 20],
+]
+
+const detailed = (rows: [string, number][] = DETAILED_ROWS): CacoDetailed => ({
+  parameters: { shopId: 'WFW430', from: new Date(Date.UTC(2026, 8, 13)), to: null },
+  transactions: rows.map(([orderType, amount], index) => ({
+    userId: 'Basem.Alawalgy',
+    userFullName: 'Basem.Alawalgy',
+    manager: null,
+    shopId: 'WFW430',
+    date: new Date(Date.UTC(2026, 8, 13)),
+    time: '5:38 PM',
+    receiptNo: `ZN_${index}`,
+    amount,
+    paymentMethod: 'Cash',
+    orderType,
+    salesOrderNumber: null,
+    status: 'Processed',
+  })),
+  reportedTotal: null,
+  skippedRows: 0,
 })
 
 const CACO_ROWS = [
@@ -97,6 +129,56 @@ describe('buildDailyFigures', () => {
     })
 
     expect(figures.totalSales).toBe(4124.14)
+  })
+
+  it('recovers the same BSS split from the detailed export alone', () => {
+    // Every figure below matches the summary the real pair was checked against.
+    const figures = buildDailyFigures({ detailed: detailed() })
+
+    expect(figures.bss).toEqual({
+      billPayment: 2289.98,
+      ordering: 1411.16,
+      cashSales: 423,
+    })
+  })
+
+  it('reads a sales order from what was sold, not from a named order type', () => {
+    const figures = buildDailyFigures({
+      detailed: detailed([
+        ['Flex 109"Add/Remove Add-On - Order Entry"', 376.05],
+        ['Setup Fee Prepaid\nPre-loaded balance', 350.85],
+      ]),
+    })
+
+    expect(figures.bss.ordering).toBe(726.9)
+    expect(figures.bss.billPayment).toBe(0)
+  })
+
+  it('leaves a refund and an EVD voucher out, as the summary does', () => {
+    const figures = buildDailyFigures({
+      detailed: detailed([
+        ['Invoice Payment', 100],
+        ['Refund', 50],
+        ['EVD Voucher', 25],
+      ]),
+    })
+
+    expect(figures.bss).toEqual({ billPayment: 100, ordering: 0, cashSales: 0 })
+  })
+
+  it('prefers the summary when both CACO exports are uploaded', () => {
+    const figures = buildDailyFigures({
+      caco: caco([{ orderType: 'Invoice Payment', total: 999 }]),
+      detailed: detailed(),
+    })
+
+    expect(figures.bss.billPayment).toBe(999)
+  })
+
+  it('dates the report from the detailed export when there is no summary', () => {
+    expect(buildDailyFigures({ detailed: detailed() }).date).toEqual(
+      new Date(Date.UTC(2026, 8, 13)),
+    )
   })
 
   it('dates the report from CACO, falling back to the terminal receipt', () => {
