@@ -5,6 +5,8 @@ import { Icon } from './Icon'
 interface Props {
   figures: DailyFigures
   reportDate: string
+  /** Refunds already taken off the figures above; 0 when the day had none. */
+  refundDeducted: number
   /** The mada receipt shows the shape that can mean Visa is really MasterCard. */
   visaMayBeMastercard: boolean
   treatVisaAsMastercard: boolean
@@ -14,6 +16,7 @@ interface Props {
 export function FiguresPanel({
   figures,
   reportDate,
+  refundDeducted,
   visaMayBeMastercard,
   treatVisaAsMastercard,
   onTreatVisaAsMastercard,
@@ -60,6 +63,12 @@ export function FiguresPanel({
           </tfoot>
         </table>
       </div>
+
+      {refundDeducted > 0 && (
+        <p className="muted">
+          يوجد عملية Refund — تم خصم {formatMoney(refundDeducted)} من التقرير.
+        </p>
+      )}
 
       <h3>التحصيل</h3>
       <div className="table-scroll">

@@ -4,7 +4,7 @@ import {
   buildDailyFigures,
   fillDailyTemplate,
   reassignVisaToMastercard,
-  refundNotes,
+  refundSummary,
   TemplateFillError,
   type DailyFigures,
 } from './dailyReport'
@@ -492,7 +492,8 @@ describe('refunds against a superseded sale', () => {
     }
 
     expect(buildDailyFigures(sources).bss.ordering).toBe(50)
-    expect(refundNotes(sources)[0]).toContain('لم يُعثر على عمليته الأصلية')
+    expect(refundSummary(sources).unplaced[0]).toContain('لم يُعثر على عمليته الأصلية')
+    expect(refundSummary(sources).deducted).toBe(0)
   })
 
   it('does not reverse a sale twice with one refund each', () => {
@@ -529,7 +530,7 @@ describe('refunds against a superseded sale', () => {
       ordering: 1361.16,
       cashSales: 0,
     })
-    expect(refundNotes(sources)[0]).toContain('خُصمت مرتجعات التقرير المختصر (50.00)')
+    expect(refundSummary(sources).deducted).toBe(50)
   })
 
   it('deducts a summary refund row the export wrote without its minus sign', () => {
@@ -547,7 +548,7 @@ describe('refunds against a superseded sale', () => {
     const sources = { caco: caco(CACO_ROWS) }
 
     expect(buildDailyFigures(sources).bss.ordering).toBe(1411.16)
-    expect(refundNotes(sources)).toEqual([])
+    expect(refundSummary(sources)).toEqual({ deducted: 0, unplaced: [] })
   })
 
   it('prefers the detailed export over the summary assumption', () => {
@@ -572,14 +573,26 @@ describe('refunds against a superseded sale', () => {
     })
   })
 
-  it('says which row a matched refund came off', () => {
-    const notes = refundNotes({
+  it('reports what it deducted, for showing beside the figures', () => {
+    const summary = refundSummary({
       detailed: withRefund(
         { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
         { amount: -50, msisdn: '966501342646' },
       ),
     })
 
-    expect(notes[0]).toContain('خُصم مرتجع بمبلغ 50.00')
+    expect(summary).toEqual({ deducted: 50, unplaced: [] })
+  })
+
+  it('counts the summary row only when the detailed export is not there', () => {
+    const summary = refundSummary({
+      caco: caco([{ orderType: 'Refund', total: -50 }]),
+      detailed: withRefund(
+        { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966501342646' },
+      ),
+    })
+
+    expect(summary.deducted).toBe(50)
   })
 })

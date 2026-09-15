@@ -1,4 +1,4 @@
-import { buildDailyFigures, refundNotes, type DailyFigures } from './dailyReport'
+import { buildDailyFigures, refundSummary, type DailyFigures } from './dailyReport'
 import { periodKey, toISODate } from './dates'
 import { deduplicateByHash, type DuplicateHit } from './dedupe'
 import { summarizeEmployees } from './employees'
@@ -57,6 +57,8 @@ export interface DailyReportBuild {
    * a MasterCard settlement. Only a person can tell the two apart.
    */
   visaMayBeMastercard: boolean
+  /** Refund total taken off the figures, for showing beside them. */
+  refundDeducted: number
   figures: DailyFigures
   employees: EmployeeSummary[]
   sources: RecognisedSource[]
@@ -216,7 +218,11 @@ export async function buildDailyReport(
   if (mada === undefined) missingSources.push('موازنة مدى')
 
   warnings.push(...crossCheck(caco, detailed))
-  warnings.push(...refundNotes({ caco, detailed }))
+
+  // A refund that was deducted is shown beside the figures it changed; one that
+  // could not be placed is a warning, since it is still in them.
+  const refunds = refundSummary({ caco, detailed })
+  warnings.push(...refunds.unplaced)
 
   if (mada?.totalsMatched === false) {
     warnings.push('إيصال مدى لا يُظهر تطابق المجاميع (TotalsMatched).')
@@ -242,6 +248,7 @@ export async function buildDailyReport(
     periodKey: periodKey(date),
     shopId,
     visaMayBeMastercard: mada?.visaMayBeMastercard ?? false,
+    refundDeducted: refunds.deducted,
     figures,
     employees: summarizeEmployees(detailed?.transactions ?? []),
     sources,

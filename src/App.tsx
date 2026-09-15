@@ -158,6 +158,7 @@ export default function App() {
           <FiguresPanel
             figures={figures}
             reportDate={report.reportDate}
+            refundDeducted={report.refundDeducted}
             visaMayBeMastercard={report.visaMayBeMastercard}
             treatVisaAsMastercard={visaIsMastercard}
             onTreatVisaAsMastercard={setVisaIsMastercard}

@@ -166,35 +166,41 @@ function applySummaryRefunds(totals: BssTotals, caco: CacoSummary): BssTotals {
 }
 
 /**
- * What the operator has to know about the day's refunds: which ones were netted
- * off, and which could not be placed and so are still in the figures.
+ * The day's refunds: how much came off the figures, and any refund that could
+ * not be placed. The deducted total belongs beside the figures — it explains a
+ * number the operator is reading — while an unplaced refund is a warning,
+ * because it is still in the figures and needs a person.
  */
-export function refundNotes(sources: DailySources): string[] {
-  const notes: string[] = []
-  const matches = sources.detailed ? matchRefunds(sources.detailed) : []
+export interface RefundSummary {
+  /** Total taken off the figures, 0 when the day had no refund. */
+  deducted: number
+  /** Refunds left in the figures because their original was not found. */
+  unplaced: string[]
+}
 
-  for (const { refund, reversed } of matches) {
-    const amount = Math.abs(refund.amount).toFixed(2)
+export function refundSummary(sources: DailySources): RefundSummary {
+  const summary: RefundSummary = { deducted: 0, unplaced: [] }
+
+  for (const { refund, reversed } of sources.detailed ? matchRefunds(sources.detailed) : []) {
+    const amount = Math.abs(refund.amount)
     const line = refund.msisdn ?? refund.account ?? refund.receiptNo ?? '—'
-    notes.push(
-      reversed === null
-        ? `مرتجع بمبلغ ${amount} على ${line} لم يُعثر على عمليته الأصلية في نفس اليوم، فلم يُخصم — راجعه يدويًا.`
-        : `خُصم مرتجع بمبلغ ${amount} على ${line} من صف ${reversed.orderType ?? 'المبيعات'}.`,
-    )
-  }
-
-  // The summary carries a refund row but not what each refund reversed, so the
-  // detailed export is what places them precisely.
-  if (sources.caco && sources.detailed === undefined) {
-    const total = summaryRefundTotal(sources.caco)
-    if (total > 0) {
-      notes.push(
-        `خُصمت مرتجعات التقرير المختصر (${total.toFixed(2)}) من صف Total Ordering — ارفع التقرير المفصّل إن أردت خصم كل مرتجع من صفه بالضبط.`,
+    if (reversed === null) {
+      summary.unplaced.push(
+        `مرتجع بمبلغ ${amount.toFixed(2)} على ${line} لم يُعثر على عمليته الأصلية في نفس اليوم، فلم يُخصم — راجعه يدويًا.`,
       )
+      continue
     }
+    summary.deducted += amount
   }
 
-  return notes
+  // The summary reports refunds without saying what each reversed, so it counts
+  // only when the detailed export is not there to place them.
+  if (sources.caco && sources.detailed === undefined) {
+    summary.deducted += summaryRefundTotal(sources.caco)
+  }
+
+  summary.deducted = round2(summary.deducted)
+  return summary
 }
 
 /**
