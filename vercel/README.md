@@ -12,7 +12,9 @@
 الاختبار وحده يحسم.
 
 **Node runtime لا Edge** — عمدًا: Edge في Vercel يعمل على شبكة Cloudflare نفسها،
-وهي العناوين المرفوضة.
+وهي العناوين المرفوضة. ولا يُذكر `runtime` في `vercel.json`: دالة `api/*.js`
+تعمل على Node افتراضيًا، وذكر `nodejs22.x` هناك يوقف البناء بخطأ
+«Function Runtimes must have a valid version» لأن ذلك الحقل لبيئات خارجية.
 
 ## ما يضمنه — نفس ضمانات النسخة الأولى
 
