@@ -13,6 +13,7 @@ import {
   parseCacoSummary,
   type CacoDetailed,
   type CacoSummary,
+  type CacoTransaction,
 } from './sources/caco'
 import { parseMadaReconciliation, type MadaReconciliation } from './sources/mada'
 import { parseTabsReport, type TabsReport } from './sources/tabs'
@@ -61,6 +62,8 @@ export interface DailyReportBuild {
   refundDeducted: number
   figures: DailyFigures
   employees: EmployeeSummary[]
+  /** The day's rows, for looking a receipt up by its barcode. */
+  transactions: CacoTransaction[]
   sources: RecognisedSource[]
   unrecognised: UnrecognisedFile[]
   duplicates: DuplicateHit<FingerprintedFile>[]
@@ -251,6 +254,7 @@ export async function buildDailyReport(
     refundDeducted: refunds.deducted,
     figures,
     employees: summarizeEmployees(detailed?.transactions ?? []),
+    transactions: detailed?.transactions ?? [],
     sources,
     unrecognised,
     duplicates,

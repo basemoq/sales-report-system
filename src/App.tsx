@@ -17,6 +17,7 @@ import { EmployeesPanel } from './ui/EmployeesPanel'
 import { FiguresPanel } from './ui/FiguresPanel'
 import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
+import { ScanPanel } from './ui/ScanPanel'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
 import './App.css'
@@ -152,6 +153,7 @@ export default function App() {
         supervisors={SUPERVISORS}
       />
       <UploadPanel onBuilt={onBuilt} />
+      <ScanPanel transactions={report?.transactions ?? []} />
 
       {report && figures && (
         <>

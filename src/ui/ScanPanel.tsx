@@ -1,0 +1,210 @@
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { findByCode, readCode } from '../core/scan'
+import type { CacoTransaction } from '../core/sources/caco'
+import { formatMoney } from './format'
+import { Icon } from './Icon'
+
+interface Props {
+  /** The day's rows, when a CACO detailed export has been uploaded. */
+  transactions: readonly CacoTransaction[]
+}
+
+type State =
+  | { kind: 'idle' }
+  | { kind: 'scanning' }
+  | { kind: 'read'; code: string }
+  | { kind: 'error'; message: string }
+
+/** The frame the camera is showing, as pixels a decoder can read. */
+function frameOf(video: HTMLVideoElement): ImageData | null {
+  const canvas = document.createElement('canvas')
+  canvas.width = video.videoWidth
+  canvas.height = video.videoHeight
+  if (canvas.width === 0 || canvas.height === 0) return null
+
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (context === null) return null
+  context.drawImage(video, 0, 0, canvas.width, canvas.height)
+  return context.getImageData(0, 0, canvas.width, canvas.height)
+}
+
+export function ScanPanel({ transactions }: Props) {
+  const [state, setState] = useState<State>({ kind: 'idle' })
+  const video = useRef<HTMLVideoElement>(null)
+  const stream = useRef<MediaStream | null>(null)
+  const timer = useRef<number | null>(null)
+
+  const stop = useCallback(() => {
+    if (timer.current !== null) window.clearInterval(timer.current)
+    timer.current = null
+    // A camera left running keeps the phone's indicator on and drains it.
+    stream.current?.getTracks().forEach((track) => track.stop())
+    stream.current = null
+  }, [])
+
+  // Whatever ends the scan — a code read, the panel closing, a reload — must
+  // release the camera.
+  useEffect(() => stop, [stop])
+
+  async function start() {
+    setState({ kind: 'scanning' })
+    try {
+      const media = await navigator.mediaDevices.getUserMedia({
+        // The back camera on a phone; a laptop simply has the one.
+        video: { facingMode: { ideal: 'environment' } },
+      })
+      stream.current = media
+      const element = video.current
+      if (element === null) return
+      element.srcObject = media
+      await element.play()
+
+      timer.current = window.setInterval(async () => {
+        const frame = element.videoWidth === 0 ? null : frameOf(element)
+        if (frame === null) return
+        const code = await readCode(frame)
+        if (code === null) return
+        stop()
+        setState({ kind: 'read', code })
+      }, 400)
+    } catch (cause) {
+      stop()
+      setState({
+        kind: 'error',
+        message:
+          (cause as Error).name === 'NotAllowedError'
+            ? 'لم يُسمح باستخدام الكاميرا. اسمح بها من إعدادات المتصفح، أو استخدم «من صورة».'
+            : `تعذّر تشغيل الكاميرا: ${(cause as Error).message}`,
+      })
+    }
+  }
+
+  /** The way in on a device with no camera, and when the code is a photo. */
+  async function fromImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    stop()
+    try {
+      const bitmap = await createImageBitmap(file)
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (context === null) throw new Error('تعذّرت قراءة الصورة.')
+      context.drawImage(bitmap, 0, 0)
+      const code = await readCode(context.getImageData(0, 0, canvas.width, canvas.height))
+
+      setState(
+        code === null
+          ? { kind: 'error', message: 'لم يُعثر على باركود في الصورة.' }
+          : { kind: 'read', code },
+      )
+    } catch (cause) {
+      setState({ kind: 'error', message: (cause as Error).message })
+    }
+  }
+
+  const matches = state.kind === 'read' ? findByCode(state.code, transactions) : []
+
+  return (
+    <section className="panel no-print">
+      <h2>
+        <Icon name="scan" />
+        قراءة باركود
+      </h2>
+      <p className="muted">
+        امسح باركود الإيصال للعثور على عمليته في ملف CACO المفصّل المرفوع. تعمل القراءة داخل
+        الجهاز ولا تُرسل الصورة إلى أي خادم.
+      </p>
+
+      <div className="actions">
+        {state.kind === 'scanning' ? (
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              stop()
+              setState({ kind: 'idle' })
+            }}
+          >
+            إيقاف الكاميرا
+          </button>
+        ) : (
+          <button type="button" onClick={start}>
+            فتح الكاميرا
+          </button>
+        )}
+
+        <label className="link-file">
+          من صورة
+          <input type="file" accept="image/*" onChange={fromImage} />
+        </label>
+      </div>
+
+      <video
+        ref={video}
+        className={state.kind === 'scanning' ? 'scan-view' : 'scan-view is-hidden'}
+        muted
+        playsInline
+      />
+
+      {state.kind === 'error' && (
+        <div className="note error">
+          <Icon name="error" />
+          <p>{state.message}</p>
+        </div>
+      )}
+
+      {state.kind === 'read' && (
+        <>
+          <div className="note info">
+            <Icon name="info" />
+            <p>
+              الباركود: <code>{state.code}</code>
+            </p>
+          </div>
+
+          {matches.length === 0 ? (
+            <div className="note warn">
+              <Icon name="warning" />
+              <p>
+                {transactions.length === 0
+                  ? 'ارفع تقرير CACO المفصّل أولًا للبحث عن العملية.'
+                  : 'لا توجد عملية بهذا الرقم في ملف اليوم المرفوع.'}
+              </p>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>الموظف</th>
+                    <th>الوقت</th>
+                    <th>المبلغ</th>
+                    <th>طريقة الدفع</th>
+                    <th>الوصف</th>
+                    <th>رقم الإيصال</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matches.map((transaction, index) => (
+                    <tr key={`${transaction.receiptNo}-${index}`}>
+                      <td>{transaction.userId}</td>
+                      <td>{transaction.time ?? '—'}</td>
+                      <td className="num">{formatMoney(transaction.amount)}</td>
+                      <td>{transaction.paymentMethod}</td>
+                      <td>{transaction.orderType ?? '—'}</td>
+                      <td>{transaction.receiptNo ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
