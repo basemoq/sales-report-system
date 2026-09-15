@@ -374,6 +374,25 @@ input[type='text']:focus {
   display: none;
 }
 
+/* An anchor that has to read as one of the buttons beside it. */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 /* A file input that reads as the plain link beside the camera button. */
 .link-file {
   position: relative;

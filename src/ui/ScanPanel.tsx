@@ -21,6 +21,8 @@ type State =
   | { kind: 'read'; code: string; payload: string | null }
   | { kind: 'error'; message: string }
 
+const isLink = (code: string): boolean => /^https?:\/\//i.test(code.trim())
+
 /** The frame the camera is showing, as pixels a decoder can read. */
 function frameOf(video: HTMLVideoElement): ImageData | null {
   const canvas = document.createElement('canvas')
@@ -133,8 +135,8 @@ export function ScanPanel({ transactions }: Props) {
         قراءة باركود
       </h2>
       <p className="muted">
-        امسح باركود الإيصال للعثور على عمليته في ملف CACO المفصّل المرفوع. تعمل القراءة داخل
-        الجهاز ولا تُرسل الصورة إلى أي خادم.
+        امسح باركود الإيصال لقراءة ما فيه: رمز جهاز SurePay يحمل رقم مرجع العملية ووقتها،
+        ويفتح إيصال موازنة مدى. تعمل القراءة داخل الجهاز ولا تُرسل الصورة إلى أي خادم.
       </p>
 
       <div className="actions">
@@ -208,6 +210,24 @@ export function ScanPanel({ transactions }: Props) {
           )}
 
           <div className="actions">
+            {/*
+              * The receipt itself lives on the issuer's server, not in the
+              * code, and a browser will not let this page read another site's
+              * response. So the link is opened rather than fetched — from
+              * there the browser's own «حفظ بصيغة PDF» produces a file that
+              * can be uploaded here like any other mada receipt.
+              */}
+            {isLink(state.code) && (
+              <a
+                className="button-link"
+                href={state.code}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                فتح إيصال مدى
+              </a>
+            )}
+
             <button
               type="button"
               className="link"
@@ -226,8 +246,8 @@ export function ScanPanel({ transactions }: Props) {
               <Icon name="warning" />
               <p>
                 {transactions.length === 0
-                  ? 'ارفع تقرير CACO المفصّل أولًا للبحث عن العملية.'
-                  : 'لا توجد عملية بهذا الرقم في ملف اليوم المرفوع.'}
+                  ? 'هذا رمز مدفوعات SurePay ولا يقابله رقم في CACO. افتح الإيصال أعلاه، أو ارفع تقرير CACO المفصّل للبحث عن عمليات الوقت نفسه.'
+                  : 'لا توجد عملية في ملف اليوم بنفس الرقم ولا بنفس الوقت.'}
               </p>
             </div>
           ) : (
