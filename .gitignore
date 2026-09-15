@@ -27,3 +27,7 @@ dist-ssr
 worker/node_modules
 worker/build
 .wrangler
+
+# …but the pasted bundle is a deliverable, not a build artefact.
+!worker/dist/
+!worker/dist/worker.js
