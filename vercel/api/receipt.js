@@ -1,5 +1,5 @@
 /*
- * قارئ إيصال مدى — ملف واحد للصق في محرّر Cloudflare Workers.
+ * قارئ إيصال مدى — دالة Vercel (Node runtime).
  * مولَّد من worker/src و vercel/src في مستودع sales-report-system.
  * لا تحرّره هنا؛ عدّل المصدر ثم أعد توليده بـ node worker/build.mjs
  */
@@ -208,130 +208,107 @@ function merchantOf(lines) {
     return heading.length === 0 ? null : heading.join(' ').replace(/\s+/g, ' ').trim();
 }
 
+const header = (request, name) => {
+    const value = request.headers[name];
+    return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+};
 /**
- * Arabic, and never an echo of what was sent: the input is not repeated back.
- * `upstream` carries the receipt server's own status code when it answered —
- * a number, never any of its content — because without it a failure cannot be
- * told apart from an expired link.
+ * Best effort, and honestly so: a serverless function is many short-lived
+ * instances, so a counter held in one of them sees only its own share of the
+ * traffic. It stops a loop hammering a single instance; it is not a promise.
  */
-const fail = (status, message, origin, upstream) => json(upstream === undefined ? { ok: false, error: message } : { ok: false, error: message, upstream }, status, origin);
-function json(body, status, origin) {
-    // 204 carries no body, so a preflight answers with headers alone.
-    return new Response(status === 204 ? null : JSON.stringify(body), {
-        status,
-        headers: responseHeaders(origin),
-    });
+const SEEN = new Map();
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60_000;
+function withinRate(key) {
+    const now = Date.now();
+    const hits = (SEEN.get(key) ?? []).filter((at) => now - at < RATE_WINDOW_MS);
+    hits.push(now);
+    SEEN.set(key, hits);
+    // The map must not grow without bound across a warm instance's life.
+    if (SEEN.size > 5000)
+        SEEN.clear();
+    return hits.length <= RATE_LIMIT;
 }
-function responseHeaders(origin) {
-    const headers = new Headers({
-        'content-type': 'application/json; charset=utf-8',
-        // The receipt is a live figure and must never be held anywhere.
-        'cache-control': 'no-store',
-        'referrer-policy': 'no-referrer',
-        'x-content-type-options': 'nosniff',
-        vary: 'Origin',
-    });
+function send(response, status, body, origin) {
+    response.statusCode = status;
+    response.setHeader('content-type', 'application/json; charset=utf-8');
+    // The receipt is a live figure and must never be held anywhere.
+    response.setHeader('cache-control', 'no-store');
+    response.setHeader('referrer-policy', 'no-referrer');
+    response.setHeader('x-content-type-options', 'nosniff');
+    response.setHeader('vary', 'Origin');
     if (origin === ALLOWED_ORIGIN) {
-        headers.set('access-control-allow-origin', ALLOWED_ORIGIN);
-        headers.set('access-control-allow-methods', 'POST, OPTIONS');
-        headers.set('access-control-allow-headers', 'content-type');
-        headers.set('access-control-max-age', '86400');
+        response.setHeader('access-control-allow-origin', ALLOWED_ORIGIN);
+        response.setHeader('access-control-allow-methods', 'POST, OPTIONS');
+        response.setHeader('access-control-allow-headers', 'content-type');
+        response.setHeader('access-control-max-age', '86400');
     }
-    return headers;
+    response.end(status === 204 ? undefined : JSON.stringify(body));
 }
-/** Reads at most the cap, and stops the transfer rather than buffering more. */
-async function readCapped(response) {
-    const body = response.body;
-    if (body === null)
-        return null;
-    const reader = body.getReader();
-    const chunks = [];
-    let size = 0;
-    try {
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done)
-                break;
-            size += value.byteLength;
-            if (size > MAX_PAGE_BYTES) {
-                await reader.cancel();
-                return null;
-            }
-            chunks.push(value);
-        }
-    }
-    finally {
-        reader.releaseLock();
-    }
-    const merged = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.byteLength;
-    }
-    return new TextDecoder('utf-8').decode(merged);
-}
-export default {
-    async fetch(request, env) {
-        const origin = request.headers.get('origin');
-        // A browser may only call this from the app; a call with no origin at all
-        // (curl, a health check) is allowed but gets no CORS grant.
-        if (origin !== null && origin !== ALLOWED_ORIGIN) {
-            return fail(403, 'هذا الطلب ليس من موقع التقارير.', null);
-        }
-        if (request.method === 'OPTIONS')
-            return json({ ok: true }, 204, origin);
-        if (request.method !== 'POST') {
-            return fail(405, 'استخدم POST مع رابط الإيصال في JSON.', origin);
-        }
-        if (!(request.headers.get('content-type') ?? '').includes('application/json')) {
-            return fail(415, 'أرسل المحتوى بصيغة JSON.', origin);
-        }
-        const length = Number(request.headers.get('content-length') ?? '0');
-        if (length > MAX_BODY_BYTES)
-            return fail(413, 'حجم الطلب أكبر مما يلزم.', origin);
-        if (env.RECEIPT_LIMITER) {
-            const key = request.headers.get('cf-connecting-ip') ?? 'unknown';
-            const { success } = await env.RECEIPT_LIMITER.limit({ key });
-            if (!success)
-                return fail(429, 'طلبات كثيرة في وقت قصير. انتظر قليلًا ثم أعد المحاولة.', origin);
-        }
-        let body;
+const fail = (response, status, message, origin, upstream) => send(response, status, upstream === undefined ? { ok: false, error: message } : { ok: false, error: message, upstream }, origin);
+/** Vercel parses JSON bodies itself; a string body is read as one anyway. */
+function bodyOf(request) {
+    if (typeof request.body === 'string') {
         try {
-            body = await request.json();
+            return JSON.parse(request.body);
         }
         catch {
-            return fail(400, 'تعذّرت قراءة الطلب: صيغته ليست JSON صالحة.', origin);
+            return null;
         }
-        const checked = checkReceiptUrl(body?.url);
-        if ('error' in checked)
-            return fail(400, checked.error, origin);
-        let upstream;
-        try {
-            upstream = await fetch(checked.url.toString(), {
-                // A redirect is never followed: the check above would be worthless if
-                // the first response could send this anywhere it liked.
-                redirect: 'manual',
-                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-                headers: BROWSER_HEADERS,
-            });
-        }
-        catch (cause) {
-            const timedOut = cause.name === 'TimeoutError';
-            return fail(504, timedOut ? 'انتهت مهلة جلب الإيصال.' : 'تعذّر الوصول إلى خادم الإيصال.', origin);
-        }
-        if (!upstream.ok || (upstream.status >= 300 && upstream.status < 400)) {
-            const { status, message } = upstreamMessage(upstream.status);
-            return fail(status, message, origin, upstream.status);
-        }
-        const html = await readCapped(upstream);
-        if (html === null)
-            return fail(502, 'صفحة الإيصال أكبر من الحد المسموح.', origin);
-        const receipt = parseReceiptHtml(html);
-        if (receipt.rows.totalDb === undefined && receipt.rows.totalCr === undefined) {
-            return fail(422, 'الصفحة لا تبدو إيصال موازنة مدى.', origin);
-        }
-        // Only the figures leave here; the page itself is dropped with this scope.
-        return json({ ok: true, receipt }, 200, origin);
-    },
-};
+    }
+    return request.body ?? null;
+}
+export default async function handler(request, response) {
+    const origin = header(request, 'origin');
+    if (origin !== null && origin !== ALLOWED_ORIGIN) {
+        return fail(response, 403, 'هذا الطلب ليس من موقع التقارير.', null);
+    }
+    if (request.method === 'OPTIONS')
+        return send(response, 204, null, origin);
+    if (request.method !== 'POST') {
+        return fail(response, 405, 'استخدم POST مع رابط الإيصال في JSON.', origin);
+    }
+    if (!(header(request, 'content-type') ?? '').includes('application/json')) {
+        return fail(response, 415, 'أرسل المحتوى بصيغة JSON.', origin);
+    }
+    if (Number(header(request, 'content-length') ?? '0') > MAX_BODY_BYTES) {
+        return fail(response, 413, 'حجم الطلب أكبر مما يلزم.', origin);
+    }
+    if (!withinRate(header(request, 'x-forwarded-for') ?? 'unknown')) {
+        return fail(response, 429, 'طلبات كثيرة في وقت قصير. انتظر قليلًا ثم أعد المحاولة.', origin);
+    }
+    const body = bodyOf(request);
+    if (body === null) {
+        return fail(response, 400, 'تعذّرت قراءة الطلب: صيغته ليست JSON صالحة.', origin);
+    }
+    const checked = checkReceiptUrl(body.url);
+    if ('error' in checked)
+        return fail(response, 400, checked.error, origin);
+    let upstream;
+    try {
+        upstream = await fetch(checked.url.toString(), {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+            headers: BROWSER_HEADERS,
+        });
+    }
+    catch (cause) {
+        const timedOut = cause.name === 'TimeoutError';
+        return fail(response, 504, timedOut ? 'انتهت مهلة جلب الإيصال.' : 'تعذّر الوصول إلى خادم الإيصال.', origin);
+    }
+    if (!upstream.ok || (upstream.status >= 300 && upstream.status < 400)) {
+        const { status, message } = upstreamMessage(upstream.status);
+        return fail(response, status, message, origin, upstream.status);
+    }
+    const html = await upstream.text();
+    if (html.length > MAX_PAGE_BYTES) {
+        return fail(response, 502, 'صفحة الإيصال أكبر من الحد المسموح.', origin);
+    }
+    const receipt = parseReceiptHtml(html);
+    if (receipt.rows.totalDb === undefined && receipt.rows.totalCr === undefined) {
+        return fail(response, 422, 'الصفحة لا تبدو إيصال موازنة مدى.', origin);
+    }
+    // Only the figures leave here; the page itself is dropped with this scope.
+    send(response, 200, { ok: true, receipt }, origin);
+}

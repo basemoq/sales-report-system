@@ -10,6 +10,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     // The Worker's parser is plain TypeScript and is tested with the app.
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'worker/src/**/*.test.ts'],
+    include: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'worker/src/**/*.test.ts',
+      'vercel/src/**/*.test.ts',
+    ],
   },
 })

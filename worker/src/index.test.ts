@@ -233,30 +233,30 @@ describe('telling one failure from another', () => {
   })
 })
 
-describe('diagnosing a refusal', () => {
-  it('tries several shapes of request and reports only what came back', async () => {
-    const called = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response('denied', { status: 401 }))
-      .mockResolvedValueOnce(new Response(PAGE, { status: 200 }))
-      .mockResolvedValueOnce(new Response('denied', { status: 401 }))
-      .mockResolvedValueOnce(new Response('denied', { status: 401 }))
+describe('telling one failure from another', () => {
+  it('reports the receipt server’s own status, and nothing it said', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<html>Access denied by WAF</html>', { status: 403 }),
+    )
+    const response = await post({ url: RECEIPT_URL })
+    const body = await response.json() as { upstream: number; error: string }
 
-    const body = await (await post({ url: RECEIPT_URL, diagnose: true })).json() as {
-      probe: { variant: string; status: number; looksLikeReceipt?: boolean }[]
-    }
-
-    expect(called).toHaveBeenCalledTimes(4)
-    expect(body.probe[0]).toMatchObject({ variant: 'browser', status: 401 })
-    expect(body.probe[1]).toMatchObject({ status: 200, looksLikeReceipt: true })
-    expect(JSON.stringify(body)).not.toContain('WINDTEL')
+    expect(body.upstream).toBe(403)
+    expect(JSON.stringify(body)).not.toContain('WAF')
   })
 
-  it('diagnoses only the link it would fetch anyway', async () => {
-    const called = vi.spyOn(globalThis, 'fetch')
-    const response = await post({ url: 'https://evil.example/r?r=1', diagnose: true })
+  it('says an expired receipt is expired', async () => {
+    upstreamReturns('gone', { status: 404 })
+    const body = await (await post({ url: RECEIPT_URL })).json() as { upstream: number }
 
-    expect(response.status).toBe(400)
-    expect(called).not.toHaveBeenCalled()
+    expect(body.upstream).toBe(404)
+  })
+
+  it('asks for the page as a phone browser would', async () => {
+    const called = upstreamReturns(PAGE)
+    await post({ url: RECEIPT_URL })
+
+    const [, options] = called.mock.calls[0] as [string, RequestInit]
+    expect((options.headers as Record<string, string>)['user-agent']).toContain('Mozilla/5.0')
   })
 })

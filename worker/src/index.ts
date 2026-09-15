@@ -1,4 +1,13 @@
 import { parseReceiptHtml, type MadaReceipt } from './parse'
+import {
+  ALLOWED_ORIGIN,
+  BROWSER_HEADERS,
+  checkReceiptUrl,
+  FETCH_TIMEOUT_MS,
+  MAX_BODY_BYTES,
+  MAX_PAGE_BYTES,
+  upstreamMessage,
+} from './receiptUrl'
 
 /**
  * A single-purpose reader for one thing: the mada reconciliation receipt that a
@@ -9,20 +18,12 @@ import { parseReceiptHtml, type MadaReceipt } from './parse'
  *
  * It is not a proxy. A link to anywhere else is refused before any request is
  * made, and the page's HTML never leaves here — only the figures read out of it.
+ *
+ * Note: SurePay answers this Worker with 401 whatever the request looks like —
+ * four different shapes were tried — while the same link is served to a home
+ * connection. The block is on Cloudflare's addresses, so the same reader also
+ * exists as a Vercel function; see vercel/ in this repository.
  */
-
-const ALLOWED_ORIGIN = 'https://basemoq.github.io'
-const ALLOWED_HOST = 'd.surepay.sa'
-const ALLOWED_PATH = '/r'
-
-/** A receipt link is a few hundred characters; anything longer is not one. */
-const MAX_URL_LENGTH = 4096
-const MAX_BODY_BYTES = 8 * 1024
-const MAX_PAGE_BYTES = 512 * 1024
-const FETCH_TIMEOUT_MS = 10_000
-
-const BROWSER_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
 interface Env {
   /** Optional: Workers rate-limiting binding, applied per client address. */
@@ -41,7 +42,11 @@ const fail = (
   origin: string | null,
   upstream?: number,
 ): Response =>
-  json(upstream === undefined ? { ok: false, error: message } : { ok: false, error: message, upstream }, status, origin)
+  json(
+    upstream === undefined ? { ok: false, error: message } : { ok: false, error: message, upstream },
+    status,
+    origin,
+  )
 
 function json(body: unknown, status: number, origin: string | null): Response {
   // 204 carries no body, so a preflight answers with headers alone.
@@ -67,37 +72,6 @@ function responseHeaders(origin: string | null): Headers {
     headers.set('access-control-max-age', '86400')
   }
   return headers
-}
-
-/**
- * The one link this accepts. Everything is checked explicitly rather than by a
- * pattern over the string: scheme, host as a whole (so `d.surepay.sa.evil.com`
- * and any other subdomain are refused), path, and the presence of the receipt's
- * own parameter. Credentials in the URL are refused too — they have no place in
- * a receipt link and are a way to dress one host up as another.
- */
-function checkReceiptUrl(value: unknown): { url: URL } | { error: string } {
-  if (typeof value !== 'string' || value.trim() === '') {
-    return { error: 'أرسل رابط الإيصال في الحقل url.' }
-  }
-  if (value.length > MAX_URL_LENGTH) return { error: 'الرابط أطول مما يقبله الإيصال.' }
-
-  let url: URL
-  try {
-    url = new URL(value.trim())
-  } catch {
-    return { error: 'الرابط غير صالح.' }
-  }
-
-  if (url.protocol !== 'https:') return { error: 'يجب أن يكون الرابط عبر HTTPS.' }
-  if (url.username !== '' || url.password !== '') return { error: 'الرابط غير صالح.' }
-  if (url.hostname.toLowerCase() !== ALLOWED_HOST) {
-    return { error: `لا يُقبل إلا رابط ${ALLOWED_HOST}.` }
-  }
-  if (url.pathname !== ALLOWED_PATH) return { error: 'مسار الرابط ليس مسار الإيصال.' }
-  if ((url.searchParams.get('r') ?? '') === '') return { error: 'الرابط لا يحمل رمز الإيصال.' }
-
-  return { url }
 }
 
 /** Reads at most the cap, and stops the transfer rather than buffering more. */
@@ -131,78 +105,6 @@ async function readCapped(response: Response): Promise<string | null> {
     offset += chunk.byteLength
   }
   return new TextDecoder('utf-8').decode(merged)
-}
-
-/**
- * The shapes a request to the receipt server can take. The first is what a
- * normal read uses; the rest exist because the page opens in a phone browser
- * but answered a plain request with 401, and the only way to find out which
- * part of a browser's request it wants is to ask it.
- */
-const VARIANTS: { name: string; headers: Record<string, string> }[] = [
-  {
-    name: 'browser',
-    headers: {
-      accept: 'text/html,application/xhtml+xml',
-      'accept-language': 'ar,en;q=0.8',
-      'user-agent': BROWSER_UA,
-    },
-  },
-  {
-    name: 'full-browser',
-    headers: {
-      accept:
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      'accept-language': 'ar-SA,ar;q=0.9,en;q=0.8',
-      'accept-encoding': 'gzip, deflate, br',
-      'cache-control': 'no-cache',
-      pragma: 'no-cache',
-      'sec-fetch-dest': 'document',
-      'sec-fetch-mode': 'navigate',
-      'sec-fetch-site': 'none',
-      'sec-fetch-user': '?1',
-      'upgrade-insecure-requests': '1',
-      'user-agent': BROWSER_UA,
-    },
-  },
-  { name: 'bare', headers: {} },
-  {
-    name: 'android',
-    headers: {
-      accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
-      'accept-language': 'ar-SA,ar;q=0.9',
-      'user-agent':
-        'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
-    },
-  },
-]
-
-/**
- * Tries each shape and reports what came back — the status, the size, and
- * whether the page carried the receipt's own heading. Never any of the content
- * itself. This is how a refusal is diagnosed without redeploying per guess.
- */
-async function probe(url: string): Promise<{ variant: string; status: number | string; bytes?: number; looksLikeReceipt?: boolean }[]> {
-  const results = []
-  for (const { name, headers } of VARIANTS) {
-    try {
-      const response = await fetch(url, {
-        redirect: 'manual',
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers,
-      })
-      const body = response.ok ? await readCapped(response) : null
-      results.push({
-        variant: name,
-        status: response.status,
-        bytes: body?.length,
-        looksLikeReceipt: body === null ? undefined : /TOTAL\s*DB/i.test(body),
-      })
-    } catch (cause) {
-      results.push({ variant: name, status: (cause as Error).name })
-    }
-  }
-  return results
 }
 
 export default {
@@ -242,12 +144,6 @@ export default {
     const checked = checkReceiptUrl((body as { url?: unknown } | null)?.url)
     if ('error' in checked) return fail(400, checked.error, origin)
 
-    // `diagnose` reports which shape of request the receipt server accepts,
-    // and returns statuses only — never a line of the page.
-    if ((body as { diagnose?: unknown }).diagnose === true) {
-      return json({ ok: true, probe: await probe(checked.url.toString()) }, 200, origin)
-    }
-
     let upstream: Response
     try {
       upstream = await fetch(checked.url.toString(), {
@@ -255,14 +151,7 @@ export default {
         // the first response could send this anywhere it liked.
         redirect: 'manual',
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers: {
-          accept: 'text/html,application/xhtml+xml',
-          'accept-language': 'ar,en;q=0.8',
-          // The receipt page is meant for a phone browser and some hosts turn
-        // away anything that does not look like one.
-        'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-        },
+        headers: BROWSER_HEADERS,
       })
     } catch (cause) {
       const timedOut = (cause as Error).name === 'TimeoutError'
@@ -273,17 +162,9 @@ export default {
       )
     }
 
-    if (upstream.status >= 300 && upstream.status < 400) {
-      return fail(502, 'الإيصال يحوّل إلى عنوان آخر، ولم يُتابَع التحويل.', origin, upstream.status)
-    }
-    if (upstream.status === 404 || upstream.status === 410) {
-      return fail(404, 'لم يعد هذا الإيصال متاحًا على خادم مدى.', origin, upstream.status)
-    }
-    if (upstream.status === 403 || upstream.status === 401) {
-      return fail(502, 'خادم الإيصال رفض الطلب.', origin, upstream.status)
-    }
-    if (!upstream.ok) {
-      return fail(502, 'خادم الإيصال لم يُرجع صفحة صالحة.', origin, upstream.status)
+    if (!upstream.ok || (upstream.status >= 300 && upstream.status < 400)) {
+      const { status, message } = upstreamMessage(upstream.status)
+      return fail(status, message, origin, upstream.status)
     }
 
     const html = await readCapped(upstream)
