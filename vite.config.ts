@@ -9,6 +9,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // The Worker's parser is plain TypeScript and is tested with the app.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'worker/src/**/*.test.ts'],
   },
 })

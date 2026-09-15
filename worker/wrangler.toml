@@ -1,0 +1,17 @@
+name = "surepay-receipt-reader"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Nothing is stored: no KV, no D1, no R2, no queues, no logpush. The Worker
+# holds the receipt only for the moment it takes to read the figures out of it.
+[observability]
+enabled = false
+
+# Per-address rate limiting. The binding is optional in the code, so the Worker
+# still deploys on an account where this API is unavailable — but leave it in:
+# without it there is no limit at all.
+[[unsafe.bindings]]
+name = "RECEIPT_LIMITER"
+type = "ratelimit"
+namespace_id = "2001"
+simple = { limit = 20, period = 60 }

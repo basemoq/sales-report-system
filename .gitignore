@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The Worker keeps its own dependencies and wrangler state.
+worker/node_modules
+.wrangler
