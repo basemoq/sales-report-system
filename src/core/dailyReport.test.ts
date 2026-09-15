@@ -515,10 +515,61 @@ describe('refunds against a superseded sale', () => {
     expect(figures.bss.ordering).toBe(50)
   })
 
-  it('asks for the detailed export when only the summary shows a refund', () => {
-    const notes = refundNotes({ caco: caco([{ orderType: 'Refund', total: -50 }]) })
+  it('takes the summary\u2019s own refund row off ordering when it stands alone', () => {
+    const sources = {
+      caco: caco([
+        { orderType: 'Sales Order Payment', total: 1411.16 },
+        { orderType: 'Invoice Payment', total: 2289.98 },
+        { orderType: 'Refund', total: -50 },
+      ]),
+    }
 
-    expect(notes[0]).toContain('ارفع التقرير المفصّل')
+    expect(buildDailyFigures(sources).bss).toEqual({
+      billPayment: 2289.98,
+      ordering: 1361.16,
+      cashSales: 0,
+    })
+    expect(refundNotes(sources)[0]).toContain('خُصمت مرتجعات التقرير المختصر (50.00)')
+  })
+
+  it('deducts a summary refund row the export wrote without its minus sign', () => {
+    const figures = buildDailyFigures({
+      caco: caco([
+        { orderType: 'Sales Order Payment', total: 1411.16 },
+        { orderType: 'Refund', total: 50 },
+      ]),
+    })
+
+    expect(figures.bss.ordering).toBe(1361.16)
+  })
+
+  it('leaves the figures alone when the summary reports no refund', () => {
+    const sources = { caco: caco(CACO_ROWS) }
+
+    expect(buildDailyFigures(sources).bss.ordering).toBe(1411.16)
+    expect(refundNotes(sources)).toEqual([])
+  })
+
+  it('prefers the detailed export over the summary assumption', () => {
+    const sources = {
+      caco: caco([
+        { orderType: 'Invoice Payment', total: 2339.98 },
+        { orderType: 'Sales Order Payment', total: 1411.16 },
+        { orderType: 'Refund', total: -50 },
+      ]),
+      detailed: withRefund(
+        { orderType: 'Invoice Payment', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966501342646' },
+      ),
+    }
+
+    // Off bill payment, where the detailed export says the sale was, and not
+    // off ordering, which is only where a lone summary would have put it.
+    expect(buildDailyFigures(sources).bss).toEqual({
+      billPayment: 2289.98,
+      ordering: 1411.16,
+      cashSales: 0,
+    })
   })
 
   it('says which row a matched refund came off', () => {

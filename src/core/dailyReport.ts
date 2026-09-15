@@ -151,6 +151,21 @@ function summaryRefundTotal(caco: CacoSummary): number {
 }
 
 /**
+ * The summary's own Refund row, taken off `Total Ordering` when the detailed
+ * export is not there to say what each refund reversed.
+ *
+ * The summary's rows are gross — a cancelled sale sits in its order-type row
+ * and the money back out in the Refund row — so leaving the refund out
+ * overstates the day. Ordering is where it goes because that is what these
+ * refunds reverse: a cancelled sales order. It is stated in the notes, and
+ * uploading the detailed export replaces the assumption with the real row.
+ */
+function applySummaryRefunds(totals: BssTotals, caco: CacoSummary): BssTotals {
+  totals.ordering -= summaryRefundTotal(caco)
+  return totals
+}
+
+/**
  * What the operator has to know about the day's refunds: which ones were netted
  * off, and which could not be placed and so are still in the figures.
  */
@@ -169,12 +184,12 @@ export function refundNotes(sources: DailySources): string[] {
   }
 
   // The summary carries a refund row but not what each refund reversed, so the
-  // detailed export is what places them.
-  if (sources.caco && matches.length === 0) {
+  // detailed export is what places them precisely.
+  if (sources.caco && sources.detailed === undefined) {
     const total = summaryRefundTotal(sources.caco)
     if (total > 0) {
       notes.push(
-        `تقرير CACO المختصر يُظهر مرتجعات بمبلغ ${total.toFixed(2)} — ارفع التقرير المفصّل ليُخصم كل مرتجع من صفه الصحيح.`,
+        `خُصمت مرتجعات التقرير المختصر (${total.toFixed(2)}) من صف Total Ordering — ارفع التقرير المفصّل إن أردت خصم كل مرتجع من صفه بالضبط.`,
       )
     }
   }
@@ -204,7 +219,7 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
     sources.caco
       ? sources.detailed
         ? applyRefunds(bssFromCaco(sources.caco), sources.detailed)
-        : bssFromCaco(sources.caco)
+        : applySummaryRefunds(bssFromCaco(sources.caco), sources.caco)
       : sources.detailed
         ? bssFromDetailed(sources.detailed)
         : ZERO_BSS,
