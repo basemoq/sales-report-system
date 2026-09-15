@@ -47,6 +47,51 @@ export async function readCode(frame: ImageData): Promise<string | null> {
 }
 
 /**
+ * Zain's receipt code is a SurePay link whose `r` parameter is the receipt
+ * itself: gzip, base64, then URL-encoded — the whole payload travels inside the
+ * code, so it can be opened on the device with nothing to call.
+ */
+const GZIP_BASE64 = /^H4sI/
+
+function payloadOf(code: string): string | null {
+  const candidates = [code.trim()]
+  try {
+    // A link carries it in a query parameter, whichever the issuer named.
+    const url = new URL(code)
+    candidates.push(...[...url.searchParams.values()])
+  } catch {
+    /* not a URL; the code may be the payload itself */
+  }
+  return candidates.find((value) => GZIP_BASE64.test(value)) ?? null
+}
+
+const bytesOf = (base64: string): Uint8Array => {
+  const binary = atob(base64.replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+}
+
+let gunzip: Promise<typeof import('fflate')['gunzipSync']> | null = null
+
+/**
+ * The receipt inside the code, unpacked. Returns null when the code carries no
+ * such payload, or when it is not readable as text — an unexpected shape is
+ * shown as the raw code rather than guessed at.
+ */
+export async function decodeCodePayload(code: string): Promise<string | null> {
+  const payload = payloadOf(code)
+  if (payload === null) return null
+
+  try {
+    gunzip ??= import('fflate').then((module) => module.gunzipSync)
+    const text = new TextDecoder().decode((await gunzip)(bytesOf(payload)))
+    // Binary payloads decode to replacement characters; those help nobody.
+    return text.includes('\uFFFD') ? null : text
+  } catch {
+    return null
+  }
+}
+
+/**
  * Digits are what a receipt code and the export have in common: the code may
  * carry a URL or extra fields around the number, and the export writes the same
  * number plainly.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { findByCode, readCode } from '../core/scan'
+import { decodeCodePayload, findByCode, readCode } from '../core/scan'
 import type { CacoTransaction } from '../core/sources/caco'
 import { formatMoney } from './format'
 import { Icon } from './Icon'
@@ -12,7 +12,7 @@ interface Props {
 type State =
   | { kind: 'idle' }
   | { kind: 'scanning' }
-  | { kind: 'read'; code: string }
+  | { kind: 'read'; code: string; payload: string | null }
   | { kind: 'error'; message: string }
 
 /** The frame the camera is showing, as pixels a decoder can read. */
@@ -65,7 +65,7 @@ export function ScanPanel({ transactions }: Props) {
         const code = await readCode(frame)
         if (code === null) return
         stop()
-        setState({ kind: 'read', code })
+        setState({ kind: 'read', code, payload: await decodeCodePayload(code) })
       }, 400)
     } catch (cause) {
       stop()
@@ -99,14 +99,19 @@ export function ScanPanel({ transactions }: Props) {
       setState(
         code === null
           ? { kind: 'error', message: 'لم يُعثر على باركود في الصورة.' }
-          : { kind: 'read', code },
+          : { kind: 'read', code, payload: await decodeCodePayload(code) },
       )
     } catch (cause) {
       setState({ kind: 'error', message: (cause as Error).message })
     }
   }
 
-  const matches = state.kind === 'read' ? findByCode(state.code, transactions) : []
+  // The receipt may be inside the code rather than named by it, so both the
+  // code and what it unpacks to are searched.
+  const matches =
+    state.kind === 'read'
+      ? findByCode([state.code, state.payload].filter(Boolean).join('\n'), transactions)
+      : []
 
   return (
     <section className="panel no-print">
@@ -164,6 +169,29 @@ export function ScanPanel({ transactions }: Props) {
             <p>
               الباركود: <code>{state.code}</code>
             </p>
+          </div>
+
+          {state.payload !== null && (
+            <div className="note info">
+              <Icon name="document" />
+              <p>
+                محتوى الرمز: <code>{state.payload}</code>
+              </p>
+            </div>
+          )}
+
+          <div className="actions">
+            <button
+              type="button"
+              className="link"
+              onClick={() =>
+                navigator.clipboard?.writeText(
+                  [state.code, state.payload].filter(Boolean).join('\n'),
+                )
+              }
+            >
+              نسخ نص الرمز
+            </button>
           </div>
 
           {matches.length === 0 ? (
