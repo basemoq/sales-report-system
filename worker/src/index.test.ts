@@ -204,3 +204,31 @@ describe('what comes back', () => {
     expect(await response.text()).not.toContain('secret-token')
   })
 })
+
+describe('telling one failure from another', () => {
+  it('reports the receipt server’s own status, and nothing it said', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<html>Access denied by WAF</html>', { status: 403 }),
+    )
+    const response = await post({ url: RECEIPT_URL })
+    const body = await response.json() as { upstream: number; error: string }
+
+    expect(body.upstream).toBe(403)
+    expect(JSON.stringify(body)).not.toContain('WAF')
+  })
+
+  it('says an expired receipt is expired', async () => {
+    upstreamReturns('gone', { status: 404 })
+    const body = await (await post({ url: RECEIPT_URL })).json() as { upstream: number }
+
+    expect(body.upstream).toBe(404)
+  })
+
+  it('asks for the page as a phone browser would', async () => {
+    const called = upstreamReturns(PAGE)
+    await post({ url: RECEIPT_URL })
+
+    const [, options] = called.mock.calls[0] as [string, RequestInit]
+    expect((options.headers as Record<string, string>)['user-agent']).toContain('Mozilla/5.0')
+  })
+})

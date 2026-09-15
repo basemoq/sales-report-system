@@ -13,5 +13,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // The tests run under the root vitest, which resolves the generated bundle.
+  "exclude": ["src/**/*.test.ts"]
 }

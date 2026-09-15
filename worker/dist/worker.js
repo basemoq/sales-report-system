@@ -156,8 +156,13 @@ const MAX_URL_LENGTH = 4096;
 const MAX_BODY_BYTES = 8 * 1024;
 const MAX_PAGE_BYTES = 512 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
-/** Arabic, and never an echo of what was sent: the input is not repeated back. */
-const fail = (status, message, origin) => json({ ok: false, error: message }, status, origin);
+/**
+ * Arabic, and never an echo of what was sent: the input is not repeated back.
+ * `upstream` carries the receipt server's own status code when it answered —
+ * a number, never any of its content — because without it a failure cannot be
+ * told apart from an expired link.
+ */
+const fail = (status, message, origin, upstream) => json(upstream === undefined ? { ok: false, error: message } : { ok: false, error: message, upstream }, status, origin);
 function json(body, status, origin) {
     // 204 carries no body, so a preflight answers with headers alone.
     return new Response(status === 204 ? null : JSON.stringify(body), {
@@ -292,7 +297,9 @@ export default {
                 headers: {
                     accept: 'text/html,application/xhtml+xml',
                     'accept-language': 'ar,en;q=0.8',
-                    'user-agent': 'Mozilla/5.0 (compatible; sales-report-system/1.0)',
+                    // The receipt page is meant for a phone browser and some hosts turn
+                    // away anything that does not look like one.
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
                 },
             });
         }
@@ -301,13 +308,17 @@ export default {
             return fail(504, timedOut ? 'انتهت مهلة جلب الإيصال.' : 'تعذّر الوصول إلى خادم الإيصال.', origin);
         }
         if (upstream.status >= 300 && upstream.status < 400) {
-            return fail(502, 'الإيصال يحوّل إلى عنوان آخر، ولم يُتابَع التحويل.', origin);
+            return fail(502, 'الإيصال يحوّل إلى عنوان آخر، ولم يُتابَع التحويل.', origin, upstream.status);
         }
         if (upstream.status === 404 || upstream.status === 410) {
-            return fail(404, 'لم يعد هذا الإيصال متاحًا على خادم مدى.', origin);
+            return fail(404, 'لم يعد هذا الإيصال متاحًا على خادم مدى.', origin, upstream.status);
         }
-        if (!upstream.ok)
-            return fail(502, 'خادم الإيصال لم يُرجع صفحة صالحة.', origin);
+        if (upstream.status === 403 || upstream.status === 401) {
+            return fail(502, 'خادم الإيصال رفض الطلب.', origin, upstream.status);
+        }
+        if (!upstream.ok) {
+            return fail(502, 'خادم الإيصال لم يُرجع صفحة صالحة.', origin, upstream.status);
+        }
         const html = await readCapped(upstream);
         if (html === null)
             return fail(502, 'صفحة الإيصال أكبر من الحد المسموح.', origin);
