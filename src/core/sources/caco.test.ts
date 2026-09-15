@@ -114,6 +114,15 @@ describe('report identification', () => {
   })
 })
 
+describe('parseCacoDetailed line columns', () => {
+  it('reads the line a transaction was sold against, which ties a refund to it', () => {
+    const [transaction] = parseCacoDetailed(detailedSheet([tx('a', 10, 'Cash')])).transactions
+
+    expect(transaction.msisdn).toBe('966541703895')
+    expect(transaction.account).toBe('1001053035')
+  })
+})
+
 describe('parseCacoSummary', () => {
   it('reads the shop and date range from the parameter band', () => {
     const report = parseCacoSummary(summarySheet())

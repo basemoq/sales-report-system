@@ -41,6 +41,9 @@ export interface CacoTransaction {
   date: Date
   time: string | null
   receiptNo: string | null
+  /** The line the sale is against; how a refund is tied to what it reverses. */
+  msisdn: string | null
+  account: string | null
   amount: number
   paymentMethod: string
   orderType: string | null
@@ -174,6 +177,8 @@ const DETAILED_COLUMNS: ColumnSpec[] = [
   { key: 'time', aliases: ['Time'] },
   { key: 'date', aliases: ['Date'], required: true },
   { key: 'receiptNo', aliases: ['Receipt No'] },
+  { key: 'msisdn', aliases: ['Sub no (MSISDN)', 'MSISDN', 'Sub no'] },
+  { key: 'account', aliases: ['Account'] },
   { key: 'amount', aliases: ['Amount'], required: true },
   { key: 'paymentMethod', aliases: ['Payment Method'], required: true },
   { key: 'orderType', aliases: ['Payment Order type/Description'] },
@@ -224,6 +229,8 @@ export function parseCacoDetailed(sheets: readonly SheetData[]): CacoDetailed {
       date,
       time: text(cellAt(row, header, 'time')),
       receiptNo: text(cellAt(row, header, 'receiptNo')),
+      msisdn: text(cellAt(row, header, 'msisdn')),
+      account: text(cellAt(row, header, 'account')),
       amount,
       paymentMethod,
       orderType: text(cellAt(row, header, 'orderType')),

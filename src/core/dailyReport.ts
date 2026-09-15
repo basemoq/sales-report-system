@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { CacoDetailed, CacoSummary } from './sources/caco'
+import type { CacoDetailed, CacoSummary, CacoTransaction } from './sources/caco'
 import type { CardTotals, MadaReconciliation } from './sources/mada'
 import type { TabsReport, TabsTotals } from './sources/tabs'
 import { matchKey } from './text'
@@ -62,6 +62,70 @@ const NAMED_ORDER_TYPES = new Map<string, keyof BssTotals | null>([
   [matchKey('EVD Voucher'), null],
 ])
 
+const REFUND = matchKey('Refund')
+
+/** Which template row a transaction belongs to; null for a row with none. */
+function bucketOf(transaction: CacoTransaction): keyof BssTotals | null {
+  const described = matchKey((transaction.orderType ?? '').trim())
+  if (!NAMED_ORDER_TYPES.has(described)) return 'ordering'
+  return NAMED_ORDER_TYPES.get(described) ?? null
+}
+
+const isRefund = (transaction: CacoTransaction): boolean =>
+  matchKey((transaction.orderType ?? '').trim()) === REFUND
+
+/** Same line, same money: how a refund is tied to the sale it reverses. */
+function reverses(refund: CacoTransaction, sale: CacoTransaction): boolean {
+  const sameLine =
+    (refund.msisdn !== null && refund.msisdn === sale.msisdn) ||
+    (refund.account !== null && refund.account === sale.account)
+  return sameLine && Math.abs(Math.abs(refund.amount) - sale.amount) < 0.005
+}
+
+export interface RefundMatch {
+  refund: CacoTransaction
+  /** The transaction it reverses, or null when none was found in the day. */
+  reversed: CacoTransaction | null
+}
+
+/**
+ * Pairs each `Refund` row with the sale it reverses.
+ *
+ * A cancelled sale is left in the export — the original row stays, marked
+ * `Superseded`, and a `Refund` row carries the money back out — so counting the
+ * original alone overstates the day by its amount. The two are tied by the line
+ * they were sold against (MSISDN, or the account when the export omits it) and
+ * an equal amount, which is what tells a genuine reversal from an unrelated
+ * refund that happens to share a figure. Each sale can only be reversed once.
+ */
+export function matchRefunds(detailed: CacoDetailed): RefundMatch[] {
+  const sales = detailed.transactions.filter((transaction) => !isRefund(transaction))
+  const taken = new Set<CacoTransaction>()
+
+  return detailed.transactions.filter(isRefund).map((refund) => ({
+    refund,
+    reversed: sales.find((sale) => !taken.has(sale) && reverses(refund, sale)) ?? null,
+  })).map((match) => {
+    if (match.reversed) taken.add(match.reversed)
+    return match
+  })
+}
+
+/**
+ * Takes each matched refund off the row its original sale was counted in. A
+ * refund whose original is not in the day is left alone and reported instead:
+ * which row it belongs to cannot be known, and guessing moves real money.
+ */
+function applyRefunds(totals: BssTotals, detailed: CacoDetailed): BssTotals {
+  for (const { refund, reversed } of matchRefunds(detailed)) {
+    if (reversed === null) continue
+    const bucket = bucketOf(reversed)
+    // A refund is a deduction whichever sign the export gives it.
+    if (bucket !== null) totals[bucket] -= Math.abs(refund.amount)
+  }
+  return totals
+}
+
 /**
  * The same split the summary reports, recovered from the per-transaction export
  * so a day can be reported from it alone. Verified against a real pair: all
@@ -71,13 +135,51 @@ function bssFromDetailed(detailed: CacoDetailed): BssTotals {
   const totals: BssTotals = { billPayment: 0, ordering: 0, cashSales: 0 }
 
   for (const transaction of detailed.transactions) {
-    const described = matchKey((transaction.orderType ?? '').trim())
-    const named = NAMED_ORDER_TYPES.get(described)
-    if (named === null) continue
-    totals[named ?? 'ordering'] += transaction.amount
+    const bucket = bucketOf(transaction)
+    if (bucket === null || isRefund(transaction)) continue
+    totals[bucket] += transaction.amount
   }
 
-  return totals
+  return applyRefunds(totals, detailed)
+}
+
+/** The refund total the summary reports as its own order-type row. */
+function summaryRefundTotal(caco: CacoSummary): number {
+  return caco.rows
+    .filter((row) => matchKey(row.orderType) === REFUND)
+    .reduce((sum, row) => sum + Math.abs(row.total), 0)
+}
+
+/**
+ * What the operator has to know about the day's refunds: which ones were netted
+ * off, and which could not be placed and so are still in the figures.
+ */
+export function refundNotes(sources: DailySources): string[] {
+  const notes: string[] = []
+  const matches = sources.detailed ? matchRefunds(sources.detailed) : []
+
+  for (const { refund, reversed } of matches) {
+    const amount = Math.abs(refund.amount).toFixed(2)
+    const line = refund.msisdn ?? refund.account ?? refund.receiptNo ?? '—'
+    notes.push(
+      reversed === null
+        ? `مرتجع بمبلغ ${amount} على ${line} لم يُعثر على عمليته الأصلية في نفس اليوم، فلم يُخصم — راجعه يدويًا.`
+        : `خُصم مرتجع بمبلغ ${amount} على ${line} من صف ${reversed.orderType ?? 'المبيعات'}.`,
+    )
+  }
+
+  // The summary carries a refund row but not what each refund reversed, so the
+  // detailed export is what places them.
+  if (sources.caco && matches.length === 0) {
+    const total = summaryRefundTotal(sources.caco)
+    if (total > 0) {
+      notes.push(
+        `تقرير CACO المختصر يُظهر مرتجعات بمبلغ ${total.toFixed(2)} — ارفع التقرير المفصّل ليُخصم كل مرتجع من صفه الصحيح.`,
+      )
+    }
+  }
+
+  return notes
 }
 
 /**
@@ -95,9 +197,14 @@ const roundAll = <T extends object>(totals: T): T =>
 export function buildDailyFigures(sources: DailySources): DailyFigures {
   const tabs = roundAll(sources.tabs?.totals ?? ZERO_TABS)
   const cards = roundAll(sources.mada?.cards ?? ZERO_CARDS)
+  // The summary's rows are gross: a cancelled sale sits in its order-type row
+  // and the money back out sits in a Refund row of its own. So the refunds are
+  // netted off here too, from the detailed export that says what each reversed.
   const bss = roundAll(
     sources.caco
-      ? bssFromCaco(sources.caco)
+      ? sources.detailed
+        ? applyRefunds(bssFromCaco(sources.caco), sources.detailed)
+        : bssFromCaco(sources.caco)
       : sources.detailed
         ? bssFromDetailed(sources.detailed)
         : ZERO_BSS,

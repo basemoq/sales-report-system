@@ -10,6 +10,8 @@ const tx = (overrides: Partial<CacoTransaction> = {}): CacoTransaction => ({
   date: new Date(Date.UTC(2026, 8, 13)),
   time: '5:38 PM',
   receiptNo: 'ZN_1',
+  msisdn: null,
+  account: null,
   amount: 100,
   paymentMethod: 'Cash',
   orderType: 'Setup Fee',

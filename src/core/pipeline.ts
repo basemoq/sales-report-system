@@ -1,4 +1,4 @@
-import { buildDailyFigures, type DailyFigures } from './dailyReport'
+import { buildDailyFigures, refundNotes, type DailyFigures } from './dailyReport'
 import { periodKey, toISODate } from './dates'
 import { deduplicateByHash, type DuplicateHit } from './dedupe'
 import { summarizeEmployees } from './employees'
@@ -216,6 +216,7 @@ export async function buildDailyReport(
   if (mada === undefined) missingSources.push('موازنة مدى')
 
   warnings.push(...crossCheck(caco, detailed))
+  warnings.push(...refundNotes({ caco, detailed }))
 
   if (mada?.totalsMatched === false) {
     warnings.push('إيصال مدى لا يُظهر تطابق المجاميع (TotalsMatched).')

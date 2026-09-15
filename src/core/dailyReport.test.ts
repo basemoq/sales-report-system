@@ -4,10 +4,11 @@ import {
   buildDailyFigures,
   fillDailyTemplate,
   reassignVisaToMastercard,
+  refundNotes,
   TemplateFillError,
   type DailyFigures,
 } from './dailyReport'
-import type { CacoDetailed, CacoSummary } from './sources/caco'
+import type { CacoDetailed, CacoSummary, CacoTransaction } from './sources/caco'
 import type { MadaReconciliation } from './sources/mada'
 import type { TabsReport } from './sources/tabs'
 
@@ -58,6 +59,8 @@ const detailed = (rows: [string, number][] = DETAILED_ROWS): CacoDetailed => ({
     userFullName: 'Basem.Alawalgy',
     manager: null,
     shopId: 'WFW430',
+    msisdn: null,
+    account: null,
     date: new Date(Date.UTC(2026, 8, 13)),
     time: '5:38 PM',
     receiptNo: `ZN_${index}`,
@@ -400,3 +403,132 @@ describe('the showroom and supervisor', () => {
   })
 })
 
+/**
+ * The real shape of a cancelled sale: the original row stays in the export,
+ * marked Superseded, and a Refund row on the same line carries the money back
+ * out — as it did on 20 Aug, where 50.00 went out at 9:43 and came back at
+ * 10:17 against the same MSISDN.
+ */
+const withRefund = (
+  original: { orderType: string; amount: number; msisdn: string },
+  refund: { amount: number; msisdn: string },
+): CacoDetailed => {
+  const base = detailed([])
+  const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+    ...detailed([['x', 0]]).transactions[0],
+    ...over,
+  })
+  return {
+    ...base,
+    transactions: [
+      row({
+        orderType: original.orderType,
+        amount: original.amount,
+        msisdn: original.msisdn,
+        status: 'Superseded',
+        paymentMethod: 'SPAN Offline',
+      }),
+      row({ orderType: 'Refund', amount: refund.amount, msisdn: refund.msisdn }),
+    ],
+  }
+}
+
+describe('refunds against a superseded sale', () => {
+  it('takes the refund off the row its original sale was counted in', () => {
+    const figures = buildDailyFigures({
+      detailed: withRefund(
+        { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966501342646' },
+      ),
+    })
+
+    expect(figures.bss.ordering).toBe(0)
+  })
+
+  it('takes it off the bill payment row when that is what was reversed', () => {
+    const figures = buildDailyFigures({
+      detailed: withRefund(
+        { orderType: 'Invoice Payment', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966501342646' },
+      ),
+    })
+
+    expect(figures.bss).toEqual({ billPayment: 0, ordering: 0, cashSales: 0 })
+  })
+
+  it('deducts a refund the export wrote without its minus sign', () => {
+    const figures = buildDailyFigures({
+      detailed: withRefund(
+        { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+        { amount: 50, msisdn: '966501342646' },
+      ),
+    })
+
+    expect(figures.bss.ordering).toBe(0)
+  })
+
+  it('nets it off the summary too, which reports its refunds in a row of their own', () => {
+    const detailedWithRefund = withRefund(
+      { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+      { amount: -50, msisdn: '966501342646' },
+    )
+    const figures = buildDailyFigures({
+      caco: caco([
+        { orderType: 'Sales Order Payment', total: 1411.16 },
+        { orderType: 'Refund', total: -50 },
+      ]),
+      detailed: detailedWithRefund,
+    })
+
+    expect(figures.bss.ordering).toBe(1361.16)
+  })
+
+  it('leaves a refund whose original is not in the day alone, and says so', () => {
+    const sources = {
+      detailed: withRefund(
+        { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966509999999' },
+      ),
+    }
+
+    expect(buildDailyFigures(sources).bss.ordering).toBe(50)
+    expect(refundNotes(sources)[0]).toContain('لم يُعثر على عمليته الأصلية')
+  })
+
+  it('does not reverse a sale twice with one refund each', () => {
+    const base = detailed([])
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const figures = buildDailyFigures({
+      detailed: {
+        ...base,
+        transactions: [
+          row({ orderType: 'Setup Fee', amount: 50, msisdn: '9665', status: 'Superseded' }),
+          row({ orderType: 'Setup Fee', amount: 50, msisdn: '9665' }),
+          row({ orderType: 'Refund', amount: -50, msisdn: '9665' }),
+        ],
+      },
+    })
+
+    expect(figures.bss.ordering).toBe(50)
+  })
+
+  it('asks for the detailed export when only the summary shows a refund', () => {
+    const notes = refundNotes({ caco: caco([{ orderType: 'Refund', total: -50 }]) })
+
+    expect(notes[0]).toContain('ارفع التقرير المفصّل')
+  })
+
+  it('says which row a matched refund came off', () => {
+    const notes = refundNotes({
+      detailed: withRefund(
+        { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966501342646' },
+      ),
+    })
+
+    expect(notes[0]).toContain('خُصم مرتجع بمبلغ 50.00')
+  })
+})
