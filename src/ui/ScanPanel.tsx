@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { decodeCodePayload, findByCode, readCode } from '../core/scan'
+import {
+  decodeCodePayload,
+  findByCode,
+  findByMoment,
+  parseReceiptPayload,
+  readCode,
+} from '../core/scan'
 import type { CacoTransaction } from '../core/sources/caco'
 import { formatMoney } from './format'
 import { Icon } from './Icon'
@@ -106,12 +112,19 @@ export function ScanPanel({ transactions }: Props) {
     }
   }
 
+  const receipt = state.kind === 'read' ? parseReceiptPayload(state.payload ?? state.code) : null
+
   // The receipt may be inside the code rather than named by it, so both the
   // code and what it unpacks to are searched.
-  const matches =
+  const byNumber =
     state.kind === 'read'
       ? findByCode([state.code, state.payload].filter(Boolean).join('\n'), transactions)
       : []
+
+  // The code's reference belongs to the payment network, not to CACO, so most
+  // receipts are found by the moment they stamp instead.
+  const byMoment = receipt && byNumber.length === 0 ? findByMoment(receipt, transactions) : []
+  const matches = byNumber.length > 0 ? byNumber : byMoment
 
   return (
     <section className="panel no-print">
@@ -176,6 +189,20 @@ export function ScanPanel({ transactions }: Props) {
               <Icon name="document" />
               <p>
                 محتوى الرمز: <code>{state.payload}</code>
+                {receipt?.reference && (
+                  <>
+                    <br />
+                    رقم المرجع: <code>{receipt.reference}</code>
+                  </>
+                )}
+                {receipt?.day && receipt.minutes !== null && (
+                  <>
+                    <br />
+                    وقت العملية: {receipt.day} —{' '}
+                    {String(Math.floor(receipt.minutes / 60)).padStart(2, '0')}:
+                    {String(receipt.minutes % 60).padStart(2, '0')}
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -204,32 +231,39 @@ export function ScanPanel({ transactions }: Props) {
               </p>
             </div>
           ) : (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>الموظف</th>
-                    <th>الوقت</th>
-                    <th>المبلغ</th>
-                    <th>طريقة الدفع</th>
-                    <th>الوصف</th>
-                    <th>رقم الإيصال</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matches.map((transaction, index) => (
-                    <tr key={`${transaction.receiptNo}-${index}`}>
-                      <td>{transaction.userId}</td>
-                      <td>{transaction.time ?? '—'}</td>
-                      <td className="num">{formatMoney(transaction.amount)}</td>
-                      <td>{transaction.paymentMethod}</td>
-                      <td>{transaction.orderType ?? '—'}</td>
-                      <td>{transaction.receiptNo ?? '—'}</td>
+            <>
+              {byNumber.length === 0 && (
+                <p className="muted">
+                  لم يحمل الرمز رقمًا من أرقام CACO، فعُثر على العمليات بوقت الإيصال نفسه.
+                </p>
+              )}
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>الموظف</th>
+                      <th>الوقت</th>
+                      <th>المبلغ</th>
+                      <th>طريقة الدفع</th>
+                      <th>الوصف</th>
+                      <th>رقم الإيصال</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {matches.map((transaction, index) => (
+                      <tr key={`${transaction.receiptNo}-${index}`}>
+                        <td>{transaction.userId}</td>
+                        <td>{transaction.time ?? '—'}</td>
+                        <td className="num">{formatMoney(transaction.amount)}</td>
+                        <td>{transaction.paymentMethod}</td>
+                        <td>{transaction.orderType ?? '—'}</td>
+                        <td>{transaction.receiptNo ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </>
       )}

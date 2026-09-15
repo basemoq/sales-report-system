@@ -129,3 +129,70 @@ export function findByCode(
     ),
   )
 }
+
+/**
+ * What a Zain receipt code carries once unpacked: a payment reference and the
+ * moment of the sale, separated by a caret — `2332054800406708^20260914235001`.
+ * Either may come first, so the fourteen-digit part is read as the timestamp
+ * and the other as the reference.
+ */
+export interface ReceiptCode {
+  reference: string | null
+  /** Local date as `YYYY-MM-DD`, from the code's own stamp. */
+  day: string | null
+  /** Minutes since midnight, local, for finding the sale by its moment. */
+  minutes: number | null
+}
+
+const TIMESTAMP = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/
+
+export function parseReceiptPayload(payload: string): ReceiptCode {
+  const parts = payload.trim().split(/[\^|;]/).map((part) => part.trim())
+  const stamp = parts.map((part) => TIMESTAMP.exec(part)).find((match) => match !== null)
+  const reference = parts.find((part) => part !== stamp?.[0] && /^\d{6,}$/.test(part)) ?? null
+
+  if (stamp === undefined) return { reference, day: null, minutes: null }
+  const [, year, month, day, hour, minute] = stamp
+  return {
+    reference,
+    day: `${year}-${month}-${day}`,
+    minutes: Number(hour) * 60 + Number(minute),
+  }
+}
+
+/** `5:38 PM`, `17:38` and `5:38:20 PM` as minutes since midnight. */
+export function timeToMinutes(time: string | null): number | null {
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i.exec(time?.trim() ?? '')
+  if (match === null) return null
+
+  const [, rawHour, minute, meridiem] = match
+  let hour = Number(rawHour)
+  if (meridiem?.toUpperCase() === 'PM' && hour !== 12) hour += 12
+  if (meridiem?.toUpperCase() === 'AM' && hour === 12) hour = 0
+  return hour * 60 + Number(minute)
+}
+
+const isoDay = (date: Date): string => date.toISOString().slice(0, 10)
+
+/**
+ * The day's rows around the moment the code stamps. Used when the code's
+ * reference is not one the export carries — which is the usual case, since the
+ * payment reference belongs to the card network, not to CACO — so the receipt
+ * can still be found by when it was rung up.
+ */
+export function findByMoment(
+  code: ReceiptCode,
+  transactions: readonly CacoTransaction[],
+  toleranceMinutes = 2,
+): CacoTransaction[] {
+  if (code.day === null || code.minutes === null) return []
+
+  return transactions.filter((transaction) => {
+    const minutes = timeToMinutes(transaction.time)
+    return (
+      minutes !== null &&
+      isoDay(transaction.date) === code.day &&
+      Math.abs(minutes - code.minutes!) <= toleranceMinutes
+    )
+  })
+}

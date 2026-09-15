@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { decodeCodePayload, findByCode } from './scan'
+import {
+  decodeCodePayload,
+  findByCode,
+  findByMoment,
+  parseReceiptPayload,
+  timeToMinutes,
+} from './scan'
 import type { CacoTransaction } from './sources/caco'
 
 const tx = (overrides: Partial<CacoTransaction> = {}): CacoTransaction => ({
@@ -93,5 +99,81 @@ describe('decodeCodePayload', () => {
     const payload = await decodeCodePayload(code)
 
     expect(findByCode([code, payload].join('\n'), [tx()])).toHaveLength(1)
+  })
+})
+
+describe('parseReceiptPayload', () => {
+  /** The real payload, unpacked from a receipt scanned on 14 Sep. */
+  const REAL = '2332054800406708^20260914235001'
+
+  it('reads the reference and the moment out of a receipt payload', () => {
+    expect(parseReceiptPayload(REAL)).toEqual({
+      reference: '2332054800406708',
+      day: '2026-09-14',
+      minutes: 23 * 60 + 50,
+    })
+  })
+
+  it('reads them whichever way round the receipt prints them', () => {
+    expect(parseReceiptPayload('20260914235001^2332054800406708')).toEqual(
+      parseReceiptPayload(REAL),
+    )
+  })
+
+  it('still gives the reference when there is no timestamp', () => {
+    expect(parseReceiptPayload('2332054800406708')).toEqual({
+      reference: '2332054800406708',
+      day: null,
+      minutes: null,
+    })
+  })
+
+  it('gives nothing for a payload of another shape', () => {
+    expect(parseReceiptPayload('hello there')).toEqual({
+      reference: null,
+      day: null,
+      minutes: null,
+    })
+  })
+})
+
+describe('timeToMinutes', () => {
+  it('reads the clock the export prints', () => {
+    expect(timeToMinutes('5:38 PM')).toBe(17 * 60 + 38)
+    expect(timeToMinutes('12:05 AM')).toBe(5)
+    expect(timeToMinutes('12:05 PM')).toBe(12 * 60 + 5)
+    expect(timeToMinutes('23:50')).toBe(23 * 60 + 50)
+    expect(timeToMinutes('11:50:01 PM')).toBe(23 * 60 + 50)
+  })
+
+  it('gives nothing for a missing or unreadable time', () => {
+    expect(timeToMinutes(null)).toBeNull()
+    expect(timeToMinutes('later')).toBeNull()
+  })
+})
+
+describe('findByMoment', () => {
+  const day = new Date(Date.UTC(2026, 8, 14))
+  const code = parseReceiptPayload('2332054800406708^20260914235001')
+
+  it('finds the sale rung up at the moment the code stamps', () => {
+    const wanted = tx({ date: day, time: '11:50 PM' })
+
+    expect(findByMoment(code, [tx({ date: day, time: '5:38 PM' }), wanted])).toEqual([wanted])
+  })
+
+  it('allows the minute or two between the sale and the card receipt', () => {
+    expect(findByMoment(code, [tx({ date: day, time: '11:52 PM' })])).toHaveLength(1)
+    expect(findByMoment(code, [tx({ date: day, time: '11:56 PM' })])).toEqual([])
+  })
+
+  it('does not reach into another day at the same clock time', () => {
+    expect(findByMoment(code, [tx({ date: new Date(Date.UTC(2026, 8, 13)), time: '11:50 PM' })]))
+      .toEqual([])
+  })
+
+  it('gives nothing when the code carries no moment', () => {
+    expect(findByMoment(parseReceiptPayload('123456'), [tx({ date: day, time: '11:50 PM' })]))
+      .toEqual([])
   })
 })
