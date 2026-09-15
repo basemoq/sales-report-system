@@ -21,6 +21,9 @@ const MAX_BODY_BYTES = 8 * 1024
 const MAX_PAGE_BYTES = 512 * 1024
 const FETCH_TIMEOUT_MS = 10_000
 
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+
 interface Env {
   /** Optional: Workers rate-limiting binding, applied per client address. */
   RECEIPT_LIMITER?: { limit: (options: { key: string }) => Promise<{ success: boolean }> }
@@ -130,6 +133,78 @@ async function readCapped(response: Response): Promise<string | null> {
   return new TextDecoder('utf-8').decode(merged)
 }
 
+/**
+ * The shapes a request to the receipt server can take. The first is what a
+ * normal read uses; the rest exist because the page opens in a phone browser
+ * but answered a plain request with 401, and the only way to find out which
+ * part of a browser's request it wants is to ask it.
+ */
+const VARIANTS: { name: string; headers: Record<string, string> }[] = [
+  {
+    name: 'browser',
+    headers: {
+      accept: 'text/html,application/xhtml+xml',
+      'accept-language': 'ar,en;q=0.8',
+      'user-agent': BROWSER_UA,
+    },
+  },
+  {
+    name: 'full-browser',
+    headers: {
+      accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'accept-language': 'ar-SA,ar;q=0.9,en;q=0.8',
+      'accept-encoding': 'gzip, deflate, br',
+      'cache-control': 'no-cache',
+      pragma: 'no-cache',
+      'sec-fetch-dest': 'document',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-site': 'none',
+      'sec-fetch-user': '?1',
+      'upgrade-insecure-requests': '1',
+      'user-agent': BROWSER_UA,
+    },
+  },
+  { name: 'bare', headers: {} },
+  {
+    name: 'android',
+    headers: {
+      accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+      'accept-language': 'ar-SA,ar;q=0.9',
+      'user-agent':
+        'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
+    },
+  },
+]
+
+/**
+ * Tries each shape and reports what came back — the status, the size, and
+ * whether the page carried the receipt's own heading. Never any of the content
+ * itself. This is how a refusal is diagnosed without redeploying per guess.
+ */
+async function probe(url: string): Promise<{ variant: string; status: number | string; bytes?: number; looksLikeReceipt?: boolean }[]> {
+  const results = []
+  for (const { name, headers } of VARIANTS) {
+    try {
+      const response = await fetch(url, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers,
+      })
+      const body = response.ok ? await readCapped(response) : null
+      results.push({
+        variant: name,
+        status: response.status,
+        bytes: body?.length,
+        looksLikeReceipt: body === null ? undefined : /TOTAL\s*DB/i.test(body),
+      })
+    } catch (cause) {
+      results.push({ variant: name, status: (cause as Error).name })
+    }
+  }
+  return results
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const origin = request.headers.get('origin')
@@ -166,6 +241,12 @@ export default {
 
     const checked = checkReceiptUrl((body as { url?: unknown } | null)?.url)
     if ('error' in checked) return fail(400, checked.error, origin)
+
+    // `diagnose` reports which shape of request the receipt server accepts,
+    // and returns statuses only — never a line of the page.
+    if ((body as { diagnose?: unknown }).diagnose === true) {
+      return json({ ok: true, probe: await probe(checked.url.toString()) }, 200, origin)
+    }
 
     let upstream: Response
     try {

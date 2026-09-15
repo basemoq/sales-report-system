@@ -232,3 +232,31 @@ describe('telling one failure from another', () => {
     expect((options.headers as Record<string, string>)['user-agent']).toContain('Mozilla/5.0')
   })
 })
+
+describe('diagnosing a refusal', () => {
+  it('tries several shapes of request and reports only what came back', async () => {
+    const called = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('denied', { status: 401 }))
+      .mockResolvedValueOnce(new Response(PAGE, { status: 200 }))
+      .mockResolvedValueOnce(new Response('denied', { status: 401 }))
+      .mockResolvedValueOnce(new Response('denied', { status: 401 }))
+
+    const body = await (await post({ url: RECEIPT_URL, diagnose: true })).json() as {
+      probe: { variant: string; status: number; looksLikeReceipt?: boolean }[]
+    }
+
+    expect(called).toHaveBeenCalledTimes(4)
+    expect(body.probe[0]).toMatchObject({ variant: 'browser', status: 401 })
+    expect(body.probe[1]).toMatchObject({ status: 200, looksLikeReceipt: true })
+    expect(JSON.stringify(body)).not.toContain('WINDTEL')
+  })
+
+  it('diagnoses only the link it would fetch anyway', async () => {
+    const called = vi.spyOn(globalThis, 'fetch')
+    const response = await post({ url: 'https://evil.example/r?r=1', diagnose: true })
+
+    expect(response.status).toBe(400)
+    expect(called).not.toHaveBeenCalled()
+  })
+})
