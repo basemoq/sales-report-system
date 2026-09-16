@@ -310,6 +310,12 @@ export interface TemplateHeader extends Partial<ReportIdentity> {
   shopId?: string | null
 }
 
+/** The two figures the template works out for itself, by their own headers. */
+const DERIVED_HEADERS: { labels: string[]; value: (f: DailyFigures) => number }[] = [
+  { labels: ['إجمالى المبيعات', 'إجمالي المبيعات', 'اجمالى المبيعات'], value: (f) => f.totalSales },
+  { labels: ['ايداع نقدي', 'إيداع نقدي', 'الإيداع النقدي'], value: (f) => f.cashDeposit },
+]
+
 const CARD_HEADERS: Record<keyof CardTotals, string[]> = {
   mada: ['شبكة - مدي', 'شبكة مدى', 'مدى', 'شبكة - مدى'],
   visa: ['فيزا'],
@@ -336,6 +342,63 @@ const cellText = (cell: ExcelJS.Cell): string | null => {
     return value.richText.map((part) => part.text).join('').trim()
   }
   return null
+}
+
+/**
+ * Makes Excel work the formulas out again instead of trusting what the template
+ * remembers.
+ *
+ * A spreadsheet stores each formula with the last value it produced. Filling in
+ * new figures does not touch those stored values, and Excel on a desktop opens
+ * a downloaded file in Protected View — which shows a file without calculating
+ * it. The totals then read as whatever the template was last saved with: the
+ * report showed 12,228.84 against rows adding to 1,480.00, while the same file
+ * on a phone, which does calculate on open, was right.
+ *
+ * So the stored values are dropped and the workbook is marked for a full
+ * recalculation on load. The formulas themselves are untouched.
+ */
+function forceRecalculation(workbook: ExcelJS.Workbook): void {
+  workbook.calcProperties.fullCalcOnLoad = true
+
+  for (const sheet of workbook.worksheets) {
+    sheet.eachRow({ includeEmpty: false }, (row) => {
+      row.eachCell({ includeEmpty: false }, (cell) => {
+        const value = cell.value
+        if (typeof value !== 'object' || value === null) return
+
+        // A formula written out once and shared down a column is stored as a
+        // reference to the cell that carries it; both keep a cached result.
+        if ('formula' in value && typeof value.formula === 'string') {
+          cell.value = {
+            formula: value.formula,
+            date1904: workbook.properties.date1904,
+          } as ExcelJS.CellFormulaValue
+        } else if ('sharedFormula' in value && typeof value.sharedFormula === 'string') {
+          cell.value = {
+            sharedFormula: value.sharedFormula,
+            date1904: workbook.properties.date1904,
+          } as ExcelJS.CellSharedFormulaValue
+        }
+      })
+    })
+  }
+}
+
+/**
+ * Stores a figure as what a formula cell shows until Excel recalculates it. The
+ * formula is untouched: this is the cached result beside it, which is what a
+ * viewer displays before it calculates anything.
+ */
+function rememberResult(cell: ExcelJS.Cell, result: number): void {
+  const value = cell.value
+  if (typeof value !== 'object' || value === null) return
+
+  if ('formula' in value && typeof value.formula === 'string') {
+    cell.value = { formula: value.formula, result } as ExcelJS.CellFormulaValue
+  } else if ('sharedFormula' in value && typeof value.sharedFormula === 'string') {
+    cell.value = { sharedFormula: value.sharedFormula, result } as ExcelJS.CellSharedFormulaValue
+  }
 }
 
 const holdsFormula = (cell: ExcelJS.Cell): boolean =>
@@ -378,6 +441,8 @@ export async function fillDailyTemplate(
 
   const sheet = workbook.worksheets[0]
   if (!sheet) throw new TemplateFillError('القالب لا يحتوي على أي ورقة عمل.')
+
+  forceRecalculation(workbook)
 
   const written: string[] = []
   const skippedFormulas: string[] = []
@@ -434,6 +499,16 @@ export async function fillDailyTemplate(
     }
     // The card figures sit on the row directly under their header band.
     write(header.row + 1, header.column, figures.cards[key])
+  }
+
+  // The template computes these two itself, so its formulas are left alone —
+  // but the figure this app worked out is stored alongside each as the value to
+  // show until Excel recalculates. Protected View shows a file without
+  // calculating it, and a blank total reads as badly as a stale one.
+  for (const { labels, value } of DERIVED_HEADERS) {
+    const header = findColumn(sheet, labels)
+    if (header === null) continue
+    rememberResult(sheet.getCell(header.row + 1, header.column), value(figures))
   }
 
   if (figures.date !== null) {

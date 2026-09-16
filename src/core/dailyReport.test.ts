@@ -229,8 +229,10 @@ async function templateBytes(): Promise<ArrayBuffer> {
   sheet.getCell('C11').value = 'فيزا'
   sheet.getCell('D11').value = 'ماستر كارد'
   sheet.getCell('E11').value = 'إجمالى المبيعات'
-  sheet.getCell('A12').value = { formula: 'E12-D12-C12-B12', result: 0 }
-  sheet.getCell('E12').value = { formula: 'SUM(D5:D10)', result: 0 }
+  // The figures the template was last saved with — the real one shipped with
+  // 12,228.84 and 5,042.50 remembered from another day.
+  sheet.getCell('A12').value = { formula: 'E12-D12-C12-B12', result: 5042.5 }
+  sheet.getCell('E12').value = { formula: 'SUM(D5:D10)', result: 12228.84 }
 
   return (await workbook.xlsx.writeBuffer()) as ArrayBuffer
 }
@@ -594,5 +596,47 @@ describe('refunds against a superseded sale', () => {
     })
 
     expect(summary.deducted).toBe(50)
+  })
+})
+
+describe('what the file shows before Excel recalculates it', () => {
+  it('replaces the template\u2019s remembered totals with this day\u2019s', async () => {
+    const sheet = await reload((await fillDailyTemplate(await templateBytes(), FIGURES)).bytes)
+
+    expect(sheet.getCell('E12').value).toMatchObject({
+      formula: 'SUM(D5:D10)',
+      result: FIGURES.totalSales,
+    })
+    expect(sheet.getCell('A12').value).toMatchObject({
+      formula: 'E12-D12-C12-B12',
+      result: FIGURES.cashDeposit,
+    })
+  })
+
+  /*
+   * A desktop opens a downloaded file in Protected View, which shows it without
+   * calculating it. Left alone, the totals read as the template's old ones —
+   * 12,228.84 against rows adding to 1,480.00 — while a phone, which does
+   * calculate on open, showed the right figure from the same file.
+   */
+  it('asks Excel to work every formula out again on open', async () => {
+    const { bytes } = await fillDailyTemplate(await templateBytes(), FIGURES)
+    // Read from the file itself: exceljs does not report this setting back.
+    const { unzipSync, strFromU8 } = await import('fflate')
+    const workbookXml = strFromU8(unzipSync(new Uint8Array(bytes))['xl/workbook.xml'])
+
+    expect(workbookXml).toContain('fullCalcOnLoad="1"')
+  })
+
+  it('leaves a formula it has no figure for with nothing remembered', async () => {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(await templateBytes())
+    workbook.worksheets[0].getCell('E13').value = { formula: 'E12*2', result: 99999 }
+    const stale = (await workbook.xlsx.writeBuffer()) as ArrayBuffer
+
+    const sheet = await reload((await fillDailyTemplate(stale, FIGURES)).bytes)
+
+    expect(sheet.getCell('E13').value).toMatchObject({ formula: 'E12*2' })
+    expect((sheet.getCell('E13').value as { result?: number }).result).toBeUndefined()
   })
 })
