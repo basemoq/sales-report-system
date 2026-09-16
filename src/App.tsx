@@ -20,7 +20,7 @@ import { SavedReportsPanel } from './ui/SavedReportsPanel'
 import { ScanPanel } from './ui/ScanPanel'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
-import { REPORT_FILE_NAME } from './ui/format'
+import { reportFileName } from './ui/format'
 import './App.css'
 
 /** Names offered in the header pickers; anything else is typed under «أخرى». */
@@ -124,7 +124,7 @@ export default function App() {
         ...identity,
         shopId: report.shopId,
       })
-      download(result.bytes, REPORT_FILE_NAME)
+      download(result.bytes, reportFileName(report.reportDate))
       setFill({
         kind: 'done',
         written: result.written.length,

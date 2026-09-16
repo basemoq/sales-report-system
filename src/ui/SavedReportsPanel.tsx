@@ -3,7 +3,7 @@ import { getTemplateBytes } from '../core/activeTemplate'
 import { fillDailyTemplate } from '../core/dailyReport'
 import { reviveSavedReport } from '../core/savedReport'
 import { deleteReport, listReports, type StoredReport } from '../db/store'
-import { formatMoney, REPORT_FILE_NAME } from './format'
+import { formatMoney, reportFileName } from './format'
 import { Icon } from './Icon'
 
 interface Props {
@@ -43,7 +43,7 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
         ...saved.identity,
         shopId: saved.shopId,
       })
-      onDownload(result.bytes, REPORT_FILE_NAME)
+      onDownload(result.bytes, reportFileName(saved.reportDate))
     } catch (cause) {
       setError((cause as Error).message)
     }

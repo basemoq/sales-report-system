@@ -27,8 +27,11 @@ export function formatDayLabel(isoDate: string): string {
 }
 
 /**
- * The name the filled template is saved under. One name for the whole app, so
+ * The name the filled template is saved under. One place for the whole app, so
  * a report downloaded from the day's build and the same report downloaded again
- * from the saved list arrive as the same file.
+ * from the saved list arrive as the same file — and the day is part of it, or a
+ * month of reports would pile up as «… (1)», «… (2)» in the downloads folder.
  */
-export const REPORT_FILE_NAME = 'تقرير المبيعات المعارض.xlsx'
+export function reportFileName(isoDate: string): string {
+  return `تقرير المبيعات المعارض ${isoDate}.xlsx`
+}
