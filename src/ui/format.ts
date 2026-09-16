@@ -25,3 +25,10 @@ export function formatDayLabel(isoDate: string): string {
   if (Number.isNaN(date.getTime())) return isoDate
   return `${isoDate} (${WEEKDAYS[date.getUTCDay()]})`
 }
+
+/**
+ * The name the filled template is saved under. One name for the whole app, so
+ * a report downloaded from the day's build and the same report downloaded again
+ * from the saved list arrive as the same file.
+ */
+export const REPORT_FILE_NAME = 'تقرير المبيعات المعارض.xlsx'
