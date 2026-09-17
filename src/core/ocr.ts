@@ -180,9 +180,14 @@ export async function readImageText(image: OcrImage): Promise<PdfTextItem[]> {
   const { data } = await engine.recognize(image.source, {}, { blocks: true })
 
   const items: PdfTextItem[] = []
+  let lineNumber = 0
   for (const block of data.blocks ?? []) {
     for (const paragraph of block.paragraphs) {
       for (const line of paragraph.lines) {
+        // The engine's own grouping, carried through: it holds on a tilted
+        // photograph where a shared baseline no longer does.
+        const id = `${page}:${lineNumber}`
+        lineNumber += 1
         const words: Word[] = []
         for (const word of line.words) {
           const text = word.text.trim()
@@ -199,6 +204,7 @@ export async function readImageText(image: OcrImage): Promise<PdfTextItem[]> {
         for (const run of mergeWords(words)) {
           items.push({
             text: run.text,
+            line: id,
             page,
             x: run.x0 * scale,
             // OCR counts down from the top; a PDF counts up from the bottom.

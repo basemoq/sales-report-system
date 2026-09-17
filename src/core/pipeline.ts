@@ -10,6 +10,7 @@ import { deduplicateByHash, type DuplicateHit } from './dedupe'
 import { summarizeEmployees } from './employees'
 import { sha256Hex } from './hash'
 import type { EmployeeSummary } from './model'
+import { splitStrips } from './image'
 import { canvasOf, readImageText } from './ocr'
 import { extractPdfText, renderPdfPages, type PdfTextItem } from './pdf'
 import {
@@ -158,7 +159,20 @@ async function readScannedText(file: FingerprintedFile): Promise<PdfTextItem[]> 
 
   const bitmap = await createImageBitmap(new Blob([file.bytes]))
   try {
-    return await readImageText(canvasOf(bitmap))
+    // A photograph may hold more than one piece of paper, and it always holds
+    // the counter they were laid on.
+    const items: PdfTextItem[] = []
+    for (const [index, strip] of splitStrips(canvasOf(bitmap).source).entries()) {
+      items.push(
+        ...(await readImageText({
+          source: strip,
+          width: strip.width,
+          height: strip.height,
+          page: index + 1,
+        })),
+      )
+    }
+    return items
   } finally {
     bitmap.close()
   }
@@ -189,7 +203,16 @@ function parseReceipt(items: PdfTextItem[]): SourceKind | null {
  * every time a second shot arrives would be the slowest thing the app does. The
  * answer only depends on the bytes, so it is kept.
  */
-type Reading = Omit<Recognised, 'file'> | { reason: string }
+/** A file that read as nothing, and what was read off it if it was a picture. */
+interface Unread {
+  reason: string
+  /** Kept so the file can be tried again alongside the others. */
+  items?: PdfTextItem[]
+}
+
+type Rejected = Unread & { file: FingerprintedFile }
+
+type Reading = Omit<Recognised, 'file'> | Unread
 
 // Only what was read is kept, never the file it was read from: the same bytes
 // can be uploaded again under another name, and the name must be this upload's.
@@ -208,7 +231,7 @@ function remember(hash: string, reading: Reading): Reading {
 }
 
 const stripFile = (
-  outcome: Recognised | { file: FingerprintedFile; reason: string },
+  outcome: Recognised | Rejected,
 ): Reading => {
   const { file: _file, ...reading } = outcome
   return reading as Reading
@@ -220,7 +243,7 @@ const stripFile = (
  */
 async function recognise(
   file: FingerprintedFile,
-): Promise<Recognised | { file: FingerprintedFile; reason: string }> {
+): Promise<Recognised | Rejected> {
   const picture = isImage(file.bytes)
 
   if (isPdf(file.bytes) || picture) {
@@ -244,18 +267,22 @@ async function recognise(
       const scanned = await readScannedText(file)
       const kind = parseReceipt(scanned)
       if (kind !== null) return { file, kind, items: scanned, scanned: true }
+
+      // Kept even though it read as nothing on its own: a slip cut into strips
+      // and photographed one at a time only carries its `RECONCILIATION`
+      // heading on the first piece, so the rest can only be read alongside it.
+      return {
+        file,
+        items: scanned,
+        reason: picture
+          ? 'الصورة لا تُقرأ كإيصال موازنة مدى ولا كتقرير TABS — صوّرها كاملة وواضحة وأعد المحاولة.'
+          : 'ملف PDF غير معروف — ليس تقرير TABS ولا إيصال موازنة مدى.',
+      }
     } catch (cause) {
       return {
         file,
         reason: `تعذّرت قراءة الإيصال المصوّر: ${(cause as Error).message}`,
       }
-    }
-
-    return {
-      file,
-      reason: picture
-        ? 'الصورة لا تُقرأ كإيصال موازنة مدى ولا كتقرير TABS — صوّرها كاملة وواضحة وأعد المحاولة.'
-        : 'ملف PDF غير معروف — ليس تقرير TABS ولا إيصال موازنة مدى.',
     }
   }
 
@@ -367,6 +394,17 @@ export async function buildDailyReport(
   if (tabs === undefined) missingSources.push('TABS')
   if (mada === undefined) missingSources.push('موازنة مدى')
 
+  // A slip cut into strips and photographed one piece at a time is one
+  // receipt, not several. Only the piece carrying the heading reads as a
+  // receipt on its own, so the pieces are tried together.
+  mada = joinScannedReceipt(outcomes, mada, sources)
+
+  // A page that read as nothing alone but belongs to a receipt that did read is
+  // not a file the operator has to look at.
+  for (let i = unrecognised.length - 1; i >= 0; i -= 1) {
+    if (sources.some((source) => source.hash === unrecognised[i].hash)) unrecognised.splice(i, 1)
+  }
+
   warnings.push(...crossCheck(caco, detailed))
 
   // A refund that was deducted is shown beside the figures it changed; one that
@@ -390,6 +428,14 @@ export async function buildDailyReport(
   if (mada?.totalsMatched === false) {
     warnings.push('إيصال مدى لا يُظهر تطابق المجاميع (TotalsMatched).')
   }
+  // A section the receipt printed but the scan could not read is a hole, not a
+  // zero, and only a person can close it.
+  for (const scheme of mada?.unread ?? []) {
+    warnings.push(
+      `إيصال مدى: قسم «${scheme}» عُثر على عنوانه ولم يُقرأ مجموعه — المبلغ غير محتسب. راجع الإيصال وأدخله يدويًا.`,
+    )
+  }
+
   for (const scheme of mada?.unmapped ?? []) {
     warnings.push(
       `إيصال مدى يحتوي على شبكة «${scheme.scheme}» بمبلغ ${scheme.amount} لا يقابلها عمود في القالب.`,
@@ -424,6 +470,60 @@ export async function buildDailyReport(
     missingSources,
     warnings,
   }
+}
+
+const cardTotal = (mada: MadaReconciliation | undefined): number =>
+  mada === undefined ? -1 : mada.cards.mada + mada.cards.visa + mada.cards.mastercard
+
+/**
+ * Reads every photographed page as one receipt, when reading them one at a
+ * time left something out.
+ *
+ * A reconciliation slip runs to more paper than a phone frames at once, and it
+ * is torn into strips. Only the strip carrying `RECONCILIATION` reads as a
+ * receipt by itself; the rest hold the sections that continue past it, and on
+ * their own they are turned away. Put back together they are one slip again.
+ *
+ * It is only adopted when it accounts for more money than reading the pages
+ * separately did, so a TABS report and a receipt photographed on the same day
+ * cannot be mashed into one another.
+ */
+function joinScannedReceipt(
+  outcomes: readonly (Recognised | Rejected)[],
+  mada: MadaReconciliation | undefined,
+  sources: RecognisedSource[],
+): MadaReconciliation | undefined {
+  const scanned = outcomes.filter(
+    (outcome): outcome is (Recognised | Rejected) & { items: PdfTextItem[] } =>
+      Array.isArray(outcome.items) && ('scanned' in outcome || 'reason' in outcome),
+  )
+  if (scanned.length < 2) return mada
+
+  // Each file keeps its pages apart from every other file's.
+  const pages: PdfTextItem[] = []
+  let offset = 0
+  for (const outcome of scanned) {
+    let highest = 0
+    for (const item of outcome.items) {
+      pages.push({ ...item, page: item.page + offset })
+      highest = Math.max(highest, item.page)
+    }
+    offset += highest
+  }
+
+  let joined: MadaReconciliation
+  try {
+    joined = parseMadaReconciliation(pages)
+  } catch {
+    return mada
+  }
+  if (cardTotal(joined) <= cardTotal(mada)) return mada
+
+  for (const outcome of scanned) {
+    if (sources.some((source) => source.hash === outcome.file.hash)) continue
+    sources.push({ fileName: outcome.file.fileName, hash: outcome.file.hash, kind: 'mada' })
+  }
+  return joined
 }
 
 /** The day's rows less the cancelled orders the figures excluded. */

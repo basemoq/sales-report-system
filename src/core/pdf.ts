@@ -5,6 +5,18 @@ export interface PdfTextItem {
   /** PDF user-space coordinates; y grows upward from the page bottom. */
   x: number
   y: number
+  /**
+   * The line this run belongs to, when whatever produced it knew.
+   *
+   * A PDF draws its text square to the page, so a shared baseline is enough to
+   * say two runs are on one line. A photograph is not square — a slip laid on a
+   * counter tilts a degree or so, which slides the right-hand column several
+   * points down the page from the label it belongs to, past any tolerance tight
+   * enough to keep neighbouring lines apart. OCR groups words into lines
+   * correctly despite the tilt, so where that grouping exists it is carried
+   * here and believed over the geometry.
+   */
+  line?: string
 }
 
 type PdfjsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs')
@@ -77,6 +89,13 @@ export function labelKey(text: string): string {
 /** Baselines drift by a point or two between a label and its value. */
 const BASELINE_TOLERANCE = 4
 
+/** Whether two runs were printed on one line. */
+export function onSameLine(a: PdfTextItem, b: PdfTextItem): boolean {
+  if (a.page !== b.page) return false
+  if (a.line !== undefined && b.line !== undefined) return a.line === b.line
+  return Math.abs(a.y - b.y) <= BASELINE_TOLERANCE
+}
+
 /**
  * Text runs joined per baseline, left to right. A heading the PDF drew as
  * several runs (`Consolidated` + `Report`) is one string here.
@@ -86,7 +105,8 @@ export function linesOf(items: readonly PdfTextItem[]): string[] {
 
   for (const item of items) {
     // Rounding to the tolerance keeps runs that drift a point apart on one line.
-    const key = `${item.page}:${Math.round(item.y / BASELINE_TOLERANCE)}`
+    const key =
+      item.line ?? `${item.page}:${Math.round(item.y / BASELINE_TOLERANCE)}`
     const line = byLine.get(key)
     if (line) line.push(item)
     else byLine.set(key, [item])
@@ -110,13 +130,7 @@ export function valueRightOf(
   isValue: (text: string) => boolean,
 ): PdfTextItem | null {
   const candidates = items
-    .filter(
-      (item) =>
-        item.page === label.page &&
-        Math.abs(item.y - label.y) <= BASELINE_TOLERANCE &&
-        item.x > label.x &&
-        isValue(item.text),
-    )
+    .filter((item) => onSameLine(item, label) && item.x > label.x && isValue(item.text))
     .sort((a, b) => a.x - b.x)
 
   return candidates[0] ?? null

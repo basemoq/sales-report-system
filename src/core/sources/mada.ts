@@ -1,5 +1,5 @@
 import { parseDateCell } from '../dates'
-import { labelKey, type PdfTextItem } from '../pdf'
+import { labelKey, linesOf, onSameLine, type PdfTextItem } from '../pdf'
 import { parseNumber } from '../text'
 
 export class MadaFormatError extends Error {
@@ -29,6 +29,13 @@ export interface MadaReconciliation {
   cards: CardTotals
   /** Schemes with money on them that no template column covers. */
   unmapped: SchemeTotals[]
+  /**
+   * Sections whose heading was found but whose figure never was — the print is
+   * too poor to read, or the strip it sits on was cut off. The section settled
+   * something and this report does not say how much, which is a hole a person
+   * has to close; it is not the same as a section that settled nothing.
+   */
+  unread: string[]
   /**
    * Sections where the receipt's own two printings of the same figure do not
    * agree. On an exported receipt this never happens; on a scanned one it means
@@ -77,9 +84,22 @@ const TOTALS = labelKey('TOTALS')
  */
 const TOTAL_DEBIT = labelKey('TOTAL DB')
 const TOTAL_CREDIT = labelKey('TOTAL CR')
-const NO_TRANSACTIONS = labelKey('<NO TRANSACTIONS>')
+/**
+ * `<NO TRANSACTIONS>` as a scan gives it back: the angle brackets are the first
+ * thing OCR loses, and the words after them are often clipped too. Nothing else
+ * on a receipt opens this way, so the opening is enough to recognise it by.
+ */
+const isNoTransactions = (key: string): boolean =>
+  key.startsWith('<no') || key.includes('notransaction')
 const RECONCILIATION = labelKey('Reconciliation')
-const TOTALS_MATCHED = labelKey('TotalsMatched')
+/**
+ * The receipt's own verdict on itself. A scan often loses the `TOTALS` and
+ * leaves `MATCHED` standing alone, so the word on its own is taken as the
+ * verdict — except where the line says the totals did *not* match, which is the
+ * one reading that must never be turned into a pass.
+ */
+const saysTotalsMatched = (key: string): boolean =>
+  key.includes('matched') && !key.includes('notmatched')
 
 /** `mada Host` and `POS TERMINAL` head subsections, not schemes. */
 const SUBSECTION_KEYS = new Set(
@@ -89,7 +109,48 @@ const SUBSECTION_KEYS = new Set(
 /** Column the scheme name is printed in; deeper text is table content. */
 const LEFT_MARGIN_TOLERANCE = 6
 
-const BASELINE_TOLERANCE = 4
+/**
+ * How far up and down the page a line is compared against when deciding whether
+ * it stands at the margin.
+ *
+ * There is no one margin on a photographed receipt. A slip laid on a counter is
+ * never quite square to the lens, so its left edge drifts across the page —
+ * measured on a real photo, 37 points from top to bottom, against a tolerance
+ * of six. An absolute margin either misses the sections at one end of the slip
+ * or lets the table rows at the other end through. What holds either way is
+ * that nothing is printed to the left of a section head, so a line is judged
+ * against its own neighbourhood instead of against the page.
+ */
+const LOCAL_MARGIN_WINDOW = 120
+
+/**
+ * One line further left is a speck of the desk, the cable, or the page
+ * underneath — a photograph carries all three. Two are the margin.
+ */
+const LINES_LEFT_OF_MARGIN = 2
+
+/** Lines with nothing printed to their left: where a section head can stand. */
+function atMargin(items: readonly PdfTextItem[]): Set<PdfTextItem> {
+  const found = new Set<PdfTextItem>()
+
+  for (const item of items) {
+    let toTheLeft = 0
+    for (const other of items) {
+      if (
+        other.page === item.page &&
+        Math.abs(other.y - item.y) <= LOCAL_MARGIN_WINDOW &&
+        other.x < item.x - LEFT_MARGIN_TOLERANCE
+      ) {
+        toTheLeft += 1
+        if (toTheLeft >= LINES_LEFT_OF_MARGIN) break
+      }
+    }
+    if (toTheLeft < LINES_LEFT_OF_MARGIN) found.add(item)
+  }
+
+  return found
+}
+
 
 /** Reading order for a receipt: down each page, then left to right. */
 function inReadingOrder(items: readonly PdfTextItem[]): PdfTextItem[] {
@@ -100,12 +161,7 @@ function inReadingOrder(items: readonly PdfTextItem[]): PdfTextItem[] {
 
 function numbersOnBaseline(items: readonly PdfTextItem[], row: PdfTextItem): number[] {
   return items
-    .filter(
-      (item) =>
-        item.page === row.page &&
-        Math.abs(item.y - row.y) <= BASELINE_TOLERANCE &&
-        item.x > row.x,
-    )
+    .filter((item) => onSameLine(item, row) && item.x > row.x)
     .sort((a, b) => a.x - b.x)
     .map((item) => parseNumber(item.text))
     .filter((value): value is number => value !== null)
@@ -126,11 +182,12 @@ export function parseMadaReconciliation(
     throw new MadaFormatError('هذا الملف ليس إيصال موازنة مدى (Reconciliation).')
   }
 
-  // The scheme name sits at the receipt's left margin; table rows start there too,
-  // so the margin is taken from the text itself rather than assumed.
-  const leftMargin = Math.min(...ordered.map((item) => item.x))
+  // The scheme name sits at the receipt's left margin; table rows start there
+  // too, so the margin is read off the text rather than assumed.
+  const margin = atMargin(ordered)
 
   const schemes: SchemeTotals[] = []
+  const uncaptured = new Set<SchemeTotals>()
   const disagreements: MadaReconciliation['disagreements'] = []
   let current: SchemeTotals | null = null
   let captured = false
@@ -139,10 +196,21 @@ export function parseMadaReconciliation(
 
   for (const item of ordered) {
     const key = labelKey(item.text)
-    const atMargin = item.x <= leftMargin + LEFT_MARGIN_TOLERANCE
+    // `mada HOST` heads the table inside a section. When a scan loses the
+    // `HOST`, a bare `mada` is left sitting under the section head — and read
+    // as a scheme of its own it takes the section's figures with it, leaving
+    // the real section looking unread. A `mada` directly under a head that has
+    // produced nothing yet is that subsection, not a new section.
+    const isSubsectionMada = key === 'mada' && current !== null && !captured
 
-    if (atMargin && SCHEME_KEYS.has(key) && !SUBSECTION_KEYS.has(key)) {
+    if (
+      margin.has(item) &&
+      SCHEME_KEYS.has(key) &&
+      !SUBSECTION_KEYS.has(key) &&
+      !isSubsectionMada
+    ) {
       current = { scheme: item.text.trim(), count: 0, amount: 0 }
+      uncaptured.add(current)
       captured = false
       debit = null
       credit = 0
@@ -152,7 +220,8 @@ export function parseMadaReconciliation(
 
     if (current === null || captured) continue
 
-    if (key === NO_TRANSACTIONS) {
+    if (isNoTransactions(key)) {
+      uncaptured.delete(current)
       captured = true
       continue
     }
@@ -174,19 +243,31 @@ export function parseMadaReconciliation(
       current.count = count ?? 0
       // A row printing only one figure is the amount, not a count.
       current.amount = amount ?? count ?? 0
+      uncaptured.delete(current)
       captured = true
 
       // Debit less credit is the section total, printed twice. A gap between
       // them is a misread digit, not an accounting difference.
-      if (debit !== null && Math.abs(debit - credit - current.amount) > 0.005) {
-        disagreements.push({
-          scheme: current.scheme,
-          totals: current.amount,
-          debit: debit - credit,
-        })
+      const fromDebit = debit === null ? null : debit - credit
+      if (fromDebit !== null && Math.abs(fromDebit - current.amount) > 0.005) {
+        if (Math.abs(Math.round(fromDebit * 100) - current.amount) < 0.5) {
+          // The total came back a hundred times the debit: a decimal point the
+          // scan dropped, and the receipt's own other printing says where it
+          // belongs. Nothing is being chosen between two readings here — one of
+          // them is not a money figure at all.
+          current.amount = fromDebit
+        } else {
+          disagreements.push({
+            scheme: current.scheme,
+            totals: current.amount,
+            debit: fromDebit,
+          })
+        }
       }
     }
   }
+
+  const unread = [...uncaptured].map((scheme) => scheme.scheme)
 
   const cards: CardTotals = { mada: 0, visa: 0, mastercard: 0 }
   const unmapped: SchemeTotals[] = []
@@ -218,8 +299,12 @@ export function parseMadaReconciliation(
     schemes,
     cards,
     unmapped,
+    unread,
     disagreements,
-    totalsMatched: ordered.some((item) => labelKey(item.text) === TOTALS_MATCHED),
+    // Read off the whole line: a scan hands back `TOTALS` and `MATCHED` as two
+    // words often enough that looking for them joined was a warning on every
+    // photographed receipt.
+    totalsMatched: linesOf(ordered).some((line) => saysTotalsMatched(labelKey(line))),
     // Only the first slot settled: it could be either card, and nothing on the
     // receipt says which.
     visaMayBeMastercard:
