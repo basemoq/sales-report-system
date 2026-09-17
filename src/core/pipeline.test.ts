@@ -70,6 +70,31 @@ const cacoDetailed = (
     }
   })
 
+/**
+ * A detailed export where rows carry the line they were sold against, which is
+ * what ties a refund to the sale it reverses.
+ *
+ * Rows are [user, amount, MSISDN, description].
+ */
+const cacoDetailedWithLines = (
+  rows: [string, number, string, string][],
+  total: number | null = null,
+) =>
+  workbookUpload('detailed-lines.xlsx', (sheet) => {
+    sheet.getCell('A1').value = 'Finance CACO report (detailed)'
+    parameterBand(sheet)
+    sheet.getRow(12).values = [...DETAILED_HEADER, 'Sub no (MSISDN)']
+    rows.forEach(([userId, amount, msisdn, description], index) => {
+      sheet.getRow(13 + index).values = [
+        userId, userId, 'Hussain.Khorma', 'WFW430', '5:38 PM', '13-Sep-2026',
+        `ZN_${index}`, amount, 'Cash', description, msisdn,
+      ]
+    })
+    if (total !== null) {
+      sheet.getRow(13 + rows.length).values = ['Total amount:', total]
+    }
+  })
+
 const textUpload = (fileName: string, text: string): UploadedFile => ({
   fileName,
   bytes: new TextEncoder().encode(text).slice().buffer as ArrayBuffer,
@@ -122,6 +147,42 @@ describe('buildDailyReport', () => {
       ordering: 1411.16,
       cashSales: 423,
     })
+  })
+
+  it('takes a reversed sale off the person who made it, not off whoever refunded it', async () => {
+    // A cancelled order is refunded by a central operations login rather than by
+    // the salesperson. Left as the export has it, the seller keeps credit for a
+    // sale that was undone and the operations account shows up as an employee
+    // in the red.
+    const report = await buildDailyReport([
+      await cacoDetailedWithLines([
+        ['ABDULLAH.YOUSEF', 40.25, '966590000953', 'SIM Replacement Fee'],
+        ['ABDULLAH.YOUSEF', 100, '966500000001', 'Setup Fee'],
+        ['zainops', -40.25, '966590000953', 'Refund'],
+      ]),
+    ])
+
+    expect(report.employees.map((e) => [e.userId, e.total])).toEqual([
+      ['ABDULLAH.YOUSEF', 100],
+    ])
+    // The day's total is the same either way — the pair cancels.
+    expect(report.figures.totalSales).toBe(100)
+  })
+
+  it('leaves a refund whose sale was not found on whoever processed it', async () => {
+    // Nothing says whose sale it reversed, so moving it would be a guess; it is
+    // already reported as needing a person.
+    const report = await buildDailyReport([
+      await cacoDetailedWithLines([
+        ['ABDULLAH.YOUSEF', 100, '966500000001', 'Setup Fee'],
+        ['zainops', -40.25, '966599999999', 'Refund'],
+      ]),
+    ])
+
+    expect(report.employees.map((e) => e.userId).sort()).toEqual([
+      'ABDULLAH.YOUSEF',
+      'zainops',
+    ])
   })
 
   it('builds the employee breakdown from the detailed export', async () => {
