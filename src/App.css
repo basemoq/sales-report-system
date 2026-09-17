@@ -714,6 +714,34 @@ input[type='text']:focus {
  * lays out the Arabic text correctly, so print the report and nothing else.
  */
 @media print {
+  /*
+   * A folded section still has to print. The employee report is downloaded by
+   * printing the page, so a closed `<details>` would hand over an empty PDF —
+   * the button would still be there and would still produce nothing.
+   */
+  .collapsible {
+    border: none;
+    background: transparent;
+  }
+
+  .collapsible > summary {
+    display: none;
+  }
+
+  .collapsible > *:not(summary) {
+    display: block !important;
+    content-visibility: visible !important;
+  }
+
+  .collapsible::details-content {
+    content-visibility: visible !important;
+    block-size: auto !important;
+  }
+
+  .collapsible-body {
+    padding: 0;
+  }
+
   .print-only {
     display: inline;
   }
@@ -869,4 +897,266 @@ input[type='text']:focus {
   border-radius: var(--radius);
   background: #fff;
   object-fit: contain;
+}
+
+/* ---------- stages, summary, collapsible sections ---------- */
+
+/* Where the day has reached. It reports state; it gates nothing. */
+.stepper ol {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  list-style: none;
+}
+
+.stepper li {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.2rem;
+  border-radius: var(--radius);
+  background: var(--head);
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.stepper .step-dot {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.stepper li.is-current {
+  color: var(--text);
+  background: var(--brand-soft);
+}
+
+.stepper li.is-current .step-dot {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.stepper li.is-done {
+  color: var(--text);
+}
+
+.stepper li.is-done .step-dot {
+  border-color: var(--ok, var(--brand));
+  color: var(--ok, var(--brand));
+}
+
+.summary-tiles {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+
+.summary-tile {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.summary-tile .icon {
+  color: var(--brand);
+}
+
+.summary-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.summary-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 640px) {
+  .summary-tiles {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* A section that opens and closes. It still prints when closed. */
+.collapsible {
+  margin-top: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+}
+
+.collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-title {
+  flex: 1;
+}
+
+.collapsible-count {
+  min-width: 1.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--line);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.collapsible-arrow {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-inline-start: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.collapsible[open] > summary .collapsible-arrow {
+  transform: rotate(135deg);
+}
+
+.collapsible-body {
+  padding: 0 0.85rem 0.85rem;
+}
+
+.collapsible.is-warn {
+  border-color: var(--warn, #b7791f);
+}
+
+.collapsible.is-warn > summary {
+  color: var(--warn, #b7791f);
+}
+
+.collapsible.is-warn .collapsible-count {
+  background: var(--warn-soft, rgba(183, 121, 31, 0.18));
+}
+
+/* ---------- uploaded files, listed one per row ---------- */
+
+.dropzone-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.dropzone-cta {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius);
+  color: var(--brand);
+  font-size: 0.9rem;
+}
+
+.hint {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.file-rows {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-rows li {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card, transparent);
+  font-size: 0.88rem;
+}
+
+.file-rows .file-name {
+  overflow-wrap: anywhere;
+}
+
+.file-rows .file-kind {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.file-rows .file-status {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.file-rows li.warning {
+  border-color: var(--warn, #b7791f);
+}
+
+/* ---------- one card per report ---------- */
+
+.report-cards {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.report-card {
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.report-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+/* The reports section holds panels of its own; they should not nest visually. */
+.reports .panel {
+  margin: 0.85rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Icons inherit their box from the text around them, so anywhere they sit in a
+   flex or grid row they need their size stated or they stretch to fill it. */
+.collapsible > summary .icon,
+.report-card h3 .icon,
+.file-rows .icon,
+.summary-tile .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
 }

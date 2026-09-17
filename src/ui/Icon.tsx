@@ -16,6 +16,8 @@ const PATHS = {
   error: 'M15 9l-6 6m0-6 6 6m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
   success: 'M8 12.5l2.5 2.5L16 9.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
   scan: 'M3 8V5a2 2 0 0 1 2-2h3m8 0h3a2 2 0 0 1 2 2v3m0 8v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M3 12h18',
+  card: 'M2 10h20M2 8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8Zm4 8h3',
+  wallet: 'M3 7V5a1 1 0 0 1 1-1h13v3M3 7v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H4a1 1 0 0 1-1-1Zm14 4h.01',
 } as const
 
 export type IconName = keyof typeof PATHS

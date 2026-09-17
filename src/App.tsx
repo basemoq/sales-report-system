@@ -16,10 +16,13 @@ import {
   ReportExistsError,
   saveReport,
 } from './db/store'
+import { Collapsible } from './ui/Collapsible'
 import { EmployeesPanel } from './ui/EmployeesPanel'
 import { FiguresPanel } from './ui/FiguresPanel'
 import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
+import { Stepper } from './ui/Stepper'
+import { SummaryStrip } from './ui/SummaryStrip'
 import { ScanPanel } from './ui/ScanPanel'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
@@ -168,65 +171,92 @@ export default function App() {
         </div>
       </header>
 
+      {/* A read-out of where the day has reached; it gates nothing. */}
+      <Stepper
+        identity={identity.showroom.trim() !== '' && identity.supervisor.trim() !== ''}
+        files={report !== null}
+        checked={report !== null && figures !== null}
+      />
+
       <IdentityPanel
         identity={identity}
         onChange={setIdentity}
         showrooms={SHOWROOMS}
         supervisors={SUPERVISORS}
       />
+
       <UploadPanel onBuilt={onBuilt} />
-      <ScanPanel transactions={report?.transactions ?? []} />
+
+      {/* The three figures the day is judged by, before and after the reading. */}
+      <SummaryStrip figures={figures} />
 
       {report && figures && (
-        <>
-          <FiguresPanel
-            figures={figures}
-            reportDate={report.reportDate}
-            refundDeducted={report.refundDeducted}
-            supersededExcluded={report.supersededExcluded}
-            visaMayBeMastercard={report.visaMayBeMastercard}
-            treatVisaAsMastercard={visaIsMastercard}
-            enteredCards={enteredCards}
-            onEnterCard={(card, value) =>
-              setEnteredCards((current) => ({ ...current, [card]: value }))
-            }
-            receiptImages={report.receiptImages}
-            onTreatVisaAsMastercard={setVisaIsMastercard}
-          />
+        <FiguresPanel
+          figures={figures}
+          reportDate={report.reportDate}
+          refundDeducted={report.refundDeducted}
+          supersededExcluded={report.supersededExcluded}
+          visaMayBeMastercard={report.visaMayBeMastercard}
+          treatVisaAsMastercard={visaIsMastercard}
+          enteredCards={enteredCards}
+          onEnterCard={(card, value) =>
+            setEnteredCards((current) => ({ ...current, [card]: value }))
+          }
+          receiptImages={report.receiptImages}
+          onTreatVisaAsMastercard={setVisaIsMastercard}
+        />
+      )}
 
-          <section className="panel no-print">
-            <h2>
-              <Icon name="download" />
-              الإخراج
-            </h2>
-            <div className="actions">
-              <button type="button" onClick={fillTemplate}>
-                تعبئة القالب وتنزيله
-              </button>
+      {/* Every report in one place, one card each. */}
+      <section className="panel reports">
+        <h2 className="no-print">
+          <Icon name="archive" />
+          التقارير
+        </h2>
 
-              {save.kind === 'confirm-replace' ? (
-                <>
-                  <div className="note warn">
-                    <Icon name="warning" />
-                    <p>
-                      يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
-                      {save.existingCreatedAt &&
-                        ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
-                      . الاستبدال نهائي ولا يمكن التراجع عنه.
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => persist(true)}>
-                    تأكيد الاستبدال
-                  </button>
-                  <button type="button" className="link" onClick={() => setSave({ kind: 'idle' })}>
-                    إلغاء
-                  </button>
-                </>
-              ) : (
-                <button type="button" onClick={() => persist(false)}>
-                  حفظ التقرير
+        {report === null || figures === null ? (
+          <p className="muted">ستظهر التقارير بعد اكتمال الفحص.</p>
+        ) : (
+          <div className="report-cards no-print">
+            <article className="report-card">
+              <h3>
+                <Icon name="document" />
+                التقرير اليومي
+              </h3>
+              <p className="muted">قالب المعرض معبّأ بأرقام اليوم، جاهز للتنزيل.</p>
+              <div className="actions">
+                <button type="button" onClick={fillTemplate}>
+                  تعبئة القالب وتنزيله
                 </button>
-              )}
+
+                {save.kind === 'confirm-replace' ? (
+                  <>
+                    <div className="note warn">
+                      <Icon name="warning" />
+                      <p>
+                        يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
+                        {save.existingCreatedAt &&
+                          ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
+                        . الاستبدال نهائي ولا يمكن التراجع عنه.
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => persist(true)}>
+                      تأكيد الاستبدال
+                    </button>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => setSave({ kind: 'idle' })}
+                    >
+                      إلغاء
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="ghost" onClick={() => persist(false)}>
+                    حفظ التقرير
+                  </button>
+                )}
+              </div>
 
               {save.kind === 'saved' && (
                 <div className="note ok">
@@ -240,7 +270,6 @@ export default function App() {
                   <p>{save.message}</p>
                 </div>
               )}
-
               {fill.kind === 'done' && (
                 <>
                   <div className="note ok">
@@ -261,14 +290,27 @@ export default function App() {
                   <p>{fill.message}</p>
                 </div>
               )}
-            </div>
-          </section>
+            </article>
+          </div>
+        )}
 
-          <EmployeesPanel employees={report.employees} reportDate={report.reportDate} />
-        </>
-      )}
+        {report && (
+          <Collapsible title="تقرير الموظفين" icon="users" count={report.employees.length}>
+            <EmployeesPanel employees={report.employees} reportDate={report.reportDate} />
+          </Collapsible>
+        )}
 
-      <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
+        <Collapsible title="التقارير المحفوظة" icon="archive">
+          <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
+        </Collapsible>
+      </section>
+
+      {/* A tool rather than a step, so it waits until it is asked for. */}
+      <div className="no-print">
+        <Collapsible title="قراءة باركود الإيصال" icon="scan">
+          <ScanPanel transactions={report?.transactions ?? []} />
+        </Collapsible>
+      </div>
 
       {/* Kept out of .no-print so it carries onto the employee report PDF. */}
       <footer className="credit">© 2026 basem.alawalgy — جميع الحقوق محفوظة</footer>
