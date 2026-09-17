@@ -118,6 +118,10 @@ export function ScanPanel({ transactions, found = null }: Props) {
       canvas.height = bitmap.height
       const context = canvas.getContext('2d', { willReadFrequently: true })
       if (context === null) throw new Error('تعذّرت قراءة الصورة.')
+      // A code with a transparent ground is black on nothing, and nothing reads
+      // as black; the paper has to be put back under it first.
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
       context.drawImage(bitmap, 0, 0)
       const code = await readCode(context.getImageData(0, 0, canvas.width, canvas.height))
 

@@ -5,6 +5,7 @@ import {
   type SourceKind,
   type UploadedFile,
 } from '../core/pipeline'
+import { readCodeFromImage } from '../core/scan'
 import { getIngestedHashes } from '../db/store'
 import { Collapsible } from './Collapsible'
 import { Icon, type IconName } from './Icon'
@@ -29,6 +30,12 @@ function sizeOf(bytes: number): string {
 
 interface Props {
   onBuilt: (report: DailyReportBuild) => void
+  /**
+   * A code found printed on a picked photograph. Reported as soon as it is
+   * read, and apart from the report: a picture of a code is worth reading
+   * whether or not the day has any figures to go with it.
+   */
+  onCode: (found: { code: string; payload: string | null }) => void
 }
 
 const KIND_LABELS: Record<SourceKind, string> = {
@@ -47,6 +54,14 @@ interface FileOutcome {
   status: string
 }
 
+/** A file the run never reported on, because the run itself failed. */
+const failedOutcome = (fileName: string): FileOutcome => ({
+  fileName,
+  kind: '—',
+  ok: false,
+  status: 'تعذّرت المعالجة — انظر الرسالة أدناه.',
+})
+
 /** What the last run produced, kept apart so each kind gets its own panel. */
 interface Outcome {
   files: FileOutcome[]
@@ -56,7 +71,7 @@ interface Outcome {
 
 const EMPTY: Outcome = { files: [], missing: [], warnings: [] }
 
-export function UploadPanel({ onBuilt }: Props) {
+export function UploadPanel({ onBuilt, onCode }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome>(EMPTY)
@@ -139,6 +154,13 @@ export function UploadPanel({ onBuilt }: Props) {
       onBuilt(report)
     } catch (cause) {
       setError((cause as Error).message)
+      // Without this every row keeps saying it is being read, while the message
+      // underneath says the reading is over.
+      setOutcome({
+        files: batch.map((file) => failedOutcome(file.fileName)),
+        missing: [],
+        warnings: [],
+      })
     }
   }
 
@@ -158,6 +180,15 @@ export function UploadPanel({ onBuilt }: Props) {
       picked.map(async (file) => ({ fileName: file.name, bytes: await file.arrayBuffer() })),
     )
     setFiles([...files.current, ...added])
+
+    // Looked for while the report is being built rather than after it, since
+    // the build can end with nothing to report and the code still matters.
+    for (const file of added) {
+      if (!/\.(png|jpe?g|heic|heif|webp|gif|bmp)$/i.test(file.fileName)) continue
+      void readCodeFromImage(file.bytes).then((found) => {
+        if (found !== null) onCode(found)
+      })
+    }
   }
 
   const read = outcome.files.filter((file) => file.ok)

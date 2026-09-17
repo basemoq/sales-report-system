@@ -139,12 +139,11 @@ describe('buildDailyReport', () => {
     expect(again.sources.map((source) => source.fileName)).toEqual(['second-name.xlsx'])
   })
 
-  it('carries no codes when the day held no photographs', async () => {
-    // Codes are read off pictures. A workbook has none, and the field is empty
-    // rather than absent, so the panel that shows them has nothing to guess at.
+  it('carries no photographs when the day held none', async () => {
+    // The pictures are kept so a figure the scan could not read can be typed in
+    // beside them; a workbook has none.
     const report = await buildDailyReport([await cacoSummary()])
 
-    expect(report.scannedCodes).toEqual([])
     expect(report.receiptImages).toEqual([])
   })
 
