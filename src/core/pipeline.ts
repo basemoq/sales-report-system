@@ -13,6 +13,7 @@ import { sha256Hex } from './hash'
 import type { EmployeeSummary } from './model'
 import { splitStrips } from './image'
 import { canvasOf, readImageText } from './ocr'
+import { decodeCodePayload, readCode } from './scan'
 import { extractPdfText, renderPdfPages, type PdfTextItem } from './pdf'
 import {
   checkDetailedTotal,
@@ -81,6 +82,13 @@ export interface DailyReportBuild {
    * paper is not always still on the counter when that happens.
    */
   receiptImages: UploadedFile[]
+  /**
+   * Codes found printed on those photographs, with what each unpacks to. A
+   * receipt photographed for its figures carries its code too, so it is read
+   * while the picture is open rather than by pointing the camera at the same
+   * slip again.
+   */
+  scannedCodes: { fileName: string; code: string; payload: string | null }[]
   sources: RecognisedSource[]
   unrecognised: UnrecognisedFile[]
   duplicates: DuplicateHit<FingerprintedFile>[]
@@ -141,6 +149,45 @@ interface Recognised {
    * digits, and these are amounts, so the operator is told to check them.
    */
   scanned?: boolean
+}
+
+/**
+ * The code in a photograph, if it carries one.
+ *
+ * A receipt is photographed for its figures, and the same photograph usually
+ * has the SurePay code printed on it. Reading it while the picture is already
+ * open costs a fraction of what reading the text does, and it saves pointing
+ * the camera at the same slip a second time from the scanner panel.
+ *
+ * A picture with no code in it is the ordinary case, not a fault: nothing is
+ * reported when none is found.
+ */
+async function readImageCode(
+  file: FingerprintedFile,
+): Promise<{ code: string; payload: string | null } | null> {
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(new Blob([file.bytes]))
+  } catch {
+    return null
+  }
+
+  try {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (context === null) return null
+    context.drawImage(bitmap, 0, 0)
+
+    const code = await readCode(context.getImageData(0, 0, canvas.width, canvas.height))
+    if (code === null) return null
+    return { code, payload: await decodeCodePayload(code) }
+  } catch {
+    // A decoder that is not there, or a frame it cannot read: the photograph is
+    // still a receipt, and the figures are what it was uploaded for.
+    return null
+  } finally {
+    bitmap.close()
+  }
 }
 
 /**
@@ -326,6 +373,18 @@ export async function buildDailyReport(
     throw new NoDataError('كل الملفات المرفوعة سبق إدخالها؛ لا يوجد جديد لمعالجته.')
   }
 
+  // Read off the photographs alongside everything else they are read for.
+  const scannedCodes = (
+    await Promise.all(
+      unique
+        .filter((file) => isImage(file.bytes))
+        .map(async (file) => {
+          const found = await readImageCode(file)
+          return found === null ? null : { fileName: file.fileName, ...found }
+        }),
+    )
+  ).filter((found): found is DailyReportBuild['scannedCodes'][number] => found !== null)
+
   const outcomes = await Promise.all(
     unique.map(async (file) => {
       const seen = readings.get(file.hash)
@@ -406,6 +465,15 @@ export async function buildDailyReport(
   // receipt on its own, so the pieces are tried together.
   mada = joinScannedReceipt(outcomes, mada, sources)
 
+  // A photograph that carried a code but no figures did its job: it is what a
+  // receipt is scanned for, not a file that failed to be read.
+  for (const found of scannedCodes) {
+    const file = unrecognised.find((entry) => entry.fileName === found.fileName)
+    if (file !== undefined) {
+      file.reason = 'قُرئ منها باركود الإيصال. لا تحمل أرقامًا تُضاف إلى التقرير.'
+    }
+  }
+
   // A page that read as nothing alone but belongs to a receipt that did read is
   // not a file the operator has to look at.
   for (let i = unrecognised.length - 1; i >= 0; i -= 1) {
@@ -474,6 +542,7 @@ export async function buildDailyReport(
     receiptImages: unique
       .filter((file) => isImage(file.bytes))
       .map((file) => ({ fileName: file.fileName, bytes: file.bytes })),
+    scannedCodes,
     sources,
     unrecognised,
     duplicates,
