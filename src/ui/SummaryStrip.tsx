@@ -15,29 +15,33 @@ export function SummaryStrip({ figures }: { figures: DailyFigures | null }) {
     figures === null ? null : figures.cards.mada + figures.cards.visa + figures.cards.mastercard
 
   const tiles: { label: string; value: number | null; icon: IconName }[] = [
-    { label: 'إجمالي المبيعات', value: figures?.totalSales ?? null, icon: 'report' },
-    { label: 'المدفوعات', value: cards, icon: 'card' },
+    { label: 'إجمالي المبيعات', value: figures?.totalSales ?? null, icon: 'card' },
+    { label: 'المدفوعات', value: cards, icon: 'coins' },
     { label: 'الإيداع النقدي', value: figures?.cashDeposit ?? null, icon: 'wallet' },
   ]
 
   return (
     <section className="panel summary">
       <h2>
-        <Icon name="report" />
+        <Icon name="chart" />
         ملخص التقرير
       </h2>
       <div className="summary-tiles">
         {tiles.map((tile) => (
           <div className="summary-tile" key={tile.label}>
-            <Icon name={tile.icon} />
+            <span className="tile-icon">
+              <Icon name={tile.icon} />
+            </span>
             <span className="summary-label">{tile.label}</span>
             <span className="summary-value">
               {tile.value === null ? '—' : formatMoney(tile.value)}
             </span>
+            <span className="summary-unit">
+              {tile.value === null ? 'يظهر بعد المعالجة' : 'ريال'}
+            </span>
           </div>
         ))}
       </div>
-      {figures === null && <p className="muted">يظهر بعد المعالجة</p>}
     </section>
   )
 }

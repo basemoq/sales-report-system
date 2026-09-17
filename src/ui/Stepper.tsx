@@ -21,7 +21,7 @@ export interface StepperState {
 export function Stepper({ identity, files, checked }: StepperState) {
   const done = [identity, files, checked, checked]
   // The stage being worked on: the first unfinished one, or the last.
-  const current = done.indexOf(false)
+  const current = done.indexOf(false) === -1 ? STEPS.length - 1 : done.indexOf(false)
 
   return (
     <nav className="stepper no-print" aria-label="مراحل إعداد التقرير">
@@ -29,7 +29,9 @@ export function Stepper({ identity, files, checked }: StepperState) {
         {STEPS.map((step, index) => (
           <li
             key={step}
-            className={done[index] ? 'is-done' : index === current ? 'is-current' : ''}
+            className={
+              done[index] ? 'is-done' : index === current ? 'is-current' : 'is-waiting'
+            }
             aria-current={index === current ? 'step' : undefined}
           >
             <span className="step-dot">{done[index] ? '✓' : index + 1}</span>

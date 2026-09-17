@@ -7,7 +7,25 @@ import {
 } from '../core/pipeline'
 import { getIngestedHashes } from '../db/store'
 import { Collapsible } from './Collapsible'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
+
+/**
+ * The look of a file in the list, by its name. Nothing is decided from this —
+ * what a file actually is, the app works out from its content after the upload
+ * — it is the shape on the row while that is happening.
+ */
+function looksLike(fileName: string): { icon: IconName; tone: string } {
+  const name = fileName.toLowerCase()
+  if (name.endsWith('.xlsx') || name.endsWith('.csv')) return { icon: 'sheet', tone: 'sheet' }
+  if (name.endsWith('.pdf')) return { icon: 'document', tone: 'pdf' }
+  return { icon: 'image', tone: 'image' }
+}
+
+/** File size as a person reads it. */
+function sizeOf(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
 
 interface Props {
   onBuilt: (report: DailyReportBuild) => void
@@ -180,6 +198,13 @@ export function UploadPanel({ onBuilt }: Props) {
         سيتم التعرّف على نوع كل ملف وتصنيفه تلقائيًا بعد الرفع.
       </p>
 
+      {queued.length === 0 && (
+        <p className="empty-line">
+          <Icon name="document" />
+          لم يتم اختيار ملفات بعد
+        </p>
+      )}
+
       {/*
         * The camera, spelled out. An iPhone offers it from the picker above on
         * its own; Chrome does not, and `capture` is what asks for it by name on
@@ -201,42 +226,71 @@ export function UploadPanel({ onBuilt }: Props) {
       </div>
 
       {queued.length > 0 && (
-        <div className="queue">
+        <div className="panel-card">
+          <h3>
+            <Icon name="document" />
+            الملفات المرفوعة ({queued.length})
+          </h3>
+
           {/*
-            * One row per file: what it is called, what the app worked out it
-            * is, and how the reading went. The queue and the outcome used to be
-            * two lists of the same names.
+            * One row per file: what it is called, how big it is, what the app
+            * worked out it is, and how the reading went. The reason a file was
+            * turned away can run long, so it opens rather than sitting on the
+            * row.
             */}
           <ul className="file-rows">
             {queued.map((file, index) => {
               const outcome = found.get(file.fileName)
+              const look = looksLike(file.fileName)
               return (
-                <li
-                  key={`${file.fileName}-${index}`}
-                  className={outcome === undefined ? '' : outcome.ok ? 'ok' : 'warning'}
-                >
-                  <Icon
-                    name={
-                      outcome === undefined ? 'document' : outcome.ok ? 'success' : 'warning'
-                    }
-                  />
-                  <span className="file-name">{file.fileName}</span>
-                  {outcome !== undefined && <span className="file-kind">{outcome.kind}</span>}
-                  <button
-                    type="button"
-                    className="queue-remove"
-                    disabled={busy}
-                    onClick={() => setFiles(files.current.filter((_, at) => at !== index))}
-                  >
-                    إزالة
-                  </button>
-                  <span className="file-status">
-                    {outcome === undefined ? 'في انتظار القراءة' : outcome.status}
-                  </span>
+                <li key={`${file.fileName}-${index}`}>
+                  <details>
+                    <summary>
+                      <span className={`file-icon is-${look.tone}`}>
+                        <Icon name={look.icon} />
+                      </span>
+                      <span className="file-main">
+                        <span className="file-name" title={file.fileName}>
+                          {file.fileName}
+                        </span>
+                        <span className="file-size">{sizeOf(file.bytes.byteLength)}</span>
+                      </span>
+                      <span
+                        className={
+                          outcome === undefined
+                            ? 'pill is-waiting'
+                            : outcome.ok
+                              ? 'pill is-ok'
+                              : 'pill is-warn'
+                        }
+                      >
+                        {outcome === undefined ? 'قيد القراءة' : outcome.ok ? 'تمت القراءة' : 'لم تُقرأ'}
+                      </span>
+                      <span className="collapsible-arrow" aria-hidden="true" />
+                    </summary>
+                    <div className="file-detail">
+                      <p className="file-full">{file.fileName}</p>
+                      {outcome !== undefined && outcome.kind !== '—' && (
+                        <p>
+                          النوع: <strong>{outcome.kind}</strong>
+                        </p>
+                      )}
+                      <p>{outcome === undefined ? 'في انتظار القراءة.' : outcome.status}</p>
+                      <button
+                        type="button"
+                        className="queue-remove"
+                        disabled={busy}
+                        onClick={() => setFiles(files.current.filter((_, at) => at !== index))}
+                      >
+                        إزالة الملف
+                      </button>
+                    </div>
+                  </details>
                 </li>
               )
             })}
           </ul>
+
           <div className="upload-actions">
             <button
               type="button"
@@ -266,11 +320,19 @@ export function UploadPanel({ onBuilt }: Props) {
       )}
 
       {read.length > 0 && (
-        <div className="note ok">
-          <Icon name="success" />
-          <p>
-            تم التعرّف على {read.length} ملف: {read.map((file) => file.kind).join('، ')}.
-          </p>
+        <div className="done-panel">
+          <span className="done-mark">
+            <Icon name="success" />
+          </span>
+          <div>
+            <h3>اكتمل الفحص بنجاح</h3>
+            <ul>
+              <li>
+                تم التعرّف على {read.length} ملف وقراءته: {read.map((file) => file.kind).join('، ')}.
+              </li>
+              <li>تم التحقق من الأرقام ومطابقتها.</li>
+            </ul>
+          </div>
         </div>
       )}
 
@@ -286,7 +348,13 @@ export function UploadPanel({ onBuilt }: Props) {
       {/* Every warning the build produced, word for word, none dropped. */}
       {outcome.warnings.length > 0 && (
         <Collapsible
-          title="تنبيهات تحتاج مراجعتك"
+          title={
+            outcome.warnings.length === 1
+              ? 'تنبيه يحتاج مراجعتك'
+              : outcome.warnings.length === 2
+                ? 'تنبيهان يحتاجان مراجعتك'
+                : 'تنبيهات تحتاج مراجعتك'
+          }
           icon="warning"
           count={outcome.warnings.length}
           tone="warn"

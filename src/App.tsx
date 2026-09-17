@@ -215,82 +215,86 @@ export default function App() {
         </h2>
 
         {report === null || figures === null ? (
-          <p className="muted">ستظهر التقارير بعد اكتمال الفحص.</p>
+          <div className="empty-reports">
+            <Icon name="document" />
+            <p>ستظهر التقارير بعد اكتمال الفحص</p>
+            <p className="muted">ارفع الملفات لتبدأ المعالجة</p>
+          </div>
         ) : (
           <div className="report-cards no-print">
             <article className="report-card">
-              <h3>
-                <Icon name="document" />
-                التقرير اليومي
-              </h3>
-              <p className="muted">قالب المعرض معبّأ بأرقام اليوم، جاهز للتنزيل.</p>
-              <div className="actions">
-                <button type="button" onClick={fillTemplate}>
-                  تعبئة القالب وتنزيله
-                </button>
-
-                {save.kind === 'confirm-replace' ? (
-                  <>
-                    <div className="note warn">
-                      <Icon name="warning" />
-                      <p>
-                        يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
-                        {save.existingCreatedAt &&
-                          ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
-                        . الاستبدال نهائي ولا يمكن التراجع عنه.
-                      </p>
-                    </div>
-                    <button type="button" onClick={() => persist(true)}>
-                      تأكيد الاستبدال
-                    </button>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => setSave({ kind: 'idle' })}
-                    >
-                      إلغاء
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" className="ghost" onClick={() => persist(false)}>
-                    حفظ التقرير
-                  </button>
-                )}
+              <span className="tile-icon">
+                <Icon name="chart" />
+              </span>
+              <div className="report-body">
+                <h3>التقرير اليومي</h3>
+                <p className="muted">قالب المعرض معبّأ بأرقام اليوم — مبيعات ومدفوعات وإيداع.</p>
+                <p className="report-meta">
+                  <span>{report.reportDate}</span>
+                  <span>XLSX</span>
+                  <span>{report.sources.length} مصدر</span>
+                </p>
               </div>
-
-              {save.kind === 'saved' && (
-                <div className="note ok">
-                  <Icon name="success" />
-                  <p>تم حفظ التقرير.</p>
-                </div>
-              )}
-              {save.kind === 'error' && (
-                <div className="note error">
-                  <Icon name="error" />
-                  <p>{save.message}</p>
-                </div>
-              )}
-              {fill.kind === 'done' && (
-                <>
-                  <div className="note ok">
-                    <Icon name="success" />
-                    <p>تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
-                  </div>
-                  {fill.warnings.map((warning) => (
-                    <div key={warning} className="note warn">
-                      <Icon name="warning" />
-                      <p>{warning}</p>
-                    </div>
-                  ))}
-                </>
-              )}
-              {fill.kind === 'error' && (
-                <div className="note error">
-                  <Icon name="error" />
-                  <p>{fill.message}</p>
-                </div>
+              {save.kind === 'confirm-replace' ? (
+                <button type="button" onClick={() => persist(true)}>
+                  تأكيد الاستبدال
+                </button>
+              ) : (
+                <button type="button" className="ghost" onClick={() => persist(false)}>
+                  حفظ التقرير
+                </button>
               )}
             </article>
+
+            {save.kind === 'confirm-replace' && (
+              <div className="note warn">
+                <Icon name="warning" />
+                <p>
+                  يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
+                  {save.existingCreatedAt && ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
+                  . الاستبدال نهائي ولا يمكن التراجع عنه.{' '}
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => setSave({ kind: 'idle' })}
+                  >
+                    إلغاء
+                  </button>
+                </p>
+              </div>
+            )}
+            {save.kind === 'saved' && (
+              <div className="note ok">
+                <Icon name="success" />
+                <p>تم حفظ التقرير.</p>
+              </div>
+            )}
+            {save.kind === 'error' && (
+              <div className="note error">
+                <Icon name="error" />
+                <p>{save.message}</p>
+              </div>
+            )}
+            {fill.kind === 'done' && (
+              <>
+                <div className="note ok">
+                  <Icon name="success" />
+                  <p>تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
+                </div>
+                {fill.warnings.map((warning) => (
+                  <div key={warning} className="note warn">
+                    <Icon name="warning" />
+                    <p>{warning}</p>
+                  </div>
+                ))}
+              </>
+            )}
+            {fill.kind === 'error' && (
+              <div className="note error">
+                <Icon name="error" />
+                <p>{fill.message}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -303,6 +307,17 @@ export default function App() {
         <Collapsible title="التقارير المحفوظة" icon="archive">
           <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
         </Collapsible>
+
+        {/*
+          * The one action the day ends with. It is the only button that fills
+          * and downloads the template, so nothing repeats it above.
+          */}
+        {report && figures && (
+          <button type="button" className="primary-wide no-print" onClick={fillTemplate}>
+            <Icon name="download" />
+            تنزيل التقرير النهائي
+          </button>
+        )}
       </section>
 
       {/* A tool rather than a step, so it waits until it is asked for. */}
