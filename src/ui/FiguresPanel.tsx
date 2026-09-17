@@ -146,99 +146,105 @@ export function FiguresPanel({
         </p>
       )}
 
-      <h3>التحصيل</h3>
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>ايداع نقدي</th>
-              <th>شبكة - مدي</th>
-              <th>فيزا</th>
-              <th>ماستر كارد</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="num">{formatMoney(figures.cashDeposit)}</td>
-              {CARD_COLUMNS.map(([card, label]) => (
-                <td className="num" key={card}>
-                  {/*
-                    * Typed over when the receipt would not give the figure up.
-                    * Printed as a plain number, since a box to type in means
-                    * nothing on paper.
-                    */}
-                  <input
-                    className={entered.has(card) ? 'cell-input is-entered no-print' : 'cell-input no-print'}
-                    type="text"
-                    inputMode="decimal"
-                    aria-label={label}
-                    value={enteredCards[card] ?? formatMoney(figures.cards[card])}
-                    onChange={(event) => onEnterCard(card, event.target.value)}
-                  />
-                  <span className="print-only">{formatMoney(figures.cards[card])}</span>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p className="muted">
-        الإيداع النقدي يحسبه القالب نفسه: إجمالى المبيعات ناقص ما حُصِّل بالبطاقات.
-      </p>
-
-      {entered.size > 0 ? (
-        <div className="notice no-print">
-          <p className="warn">
-            {[...entered]
-              .map((card) => CARD_LABELS[card])
-              .join('، ')}{' '}
-            — أُدخلت يدويًا ولم تُقرأ من الإيصال. تُحتسب في التقرير وفي القالب كما كتبتها.
-          </p>
-          <button type="button" onClick={() => entered.forEach((card) => onEnterCard(card, ''))}>
-            استرجاع المقروء من الإيصال
-          </button>
-        </div>
-      ) : (
-        <p className="muted no-print">
-          خانات البطاقات قابلة للتعديل: إذا لم يُقرأ مبلغ من الإيصال المصوّر، اكتبه هنا.
-        </p>
-      )}
-
       {/*
-        * The paper is not always still on the counter when a figure turns out
-        * to be missing, so the photograph stays where the figure is typed.
+        * Folded like the systems above it, and for the same reason: the deposit
+        * is already at the top of the page, and this is the working behind it.
+        * It opens by itself when the terminal's Visa slot needs deciding on,
+        * since that decision moves money.
         */}
-      {photos.length > 0 && (
-        <div className="receipt-photos no-print">
-          <p className="muted">الإيصالات المصوّرة — اضغط الصورة لتكبيرها وقراءة المبلغ منها:</p>
-          <div className="receipt-strip">
-            {photos.map((photo) => (
-              <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer">
-                <img src={photo.url} alt={photo.name} />
-              </a>
-            ))}
-          </div>
+      <Collapsible title="التحصيل" icon="card" open={visaMayBeMastercard}>
+        <div className="table-scroll">
+          <table className="data-table cards-table">
+            <thead>
+              <tr>
+                <th>ايداع نقدي</th>
+                <th>شبكة - مدي</th>
+                <th>فيزا</th>
+                <th>ماستر كارد</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="num">{formatMoney(figures.cashDeposit)}</td>
+                {CARD_COLUMNS.map(([card, label]) => (
+                  <td className="num" key={card}>
+                    {/*
+                      * Typed over when the receipt would not give the figure up.
+                      * A nil figure is left as a faint 0.00 rather than a real
+                      * one, so typing over it does not start with deleting it.
+                      * Printed as a plain number, since a box to type in means
+                      * nothing on paper.
+                      */}
+                    <input
+                      className={
+                        entered.has(card) ? 'cell-input is-entered no-print' : 'cell-input no-print'
+                      }
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={label}
+                      placeholder="0.00"
+                      value={
+                        enteredCards[card] ??
+                        (figures.cards[card] === 0 ? '' : formatMoney(figures.cards[card]))
+                      }
+                      onChange={(event) => onEnterCard(card, event.target.value)}
+                    />
+                    <span className="print-only">{formatMoney(figures.cards[card])}</span>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
         </div>
-      )}
 
-      {visaMayBeMastercard && (
-        <div className="notice no-print">
-          <p className="warn">
-            إيصال مدى يحمل مبلغًا في قسم <code>visa</code> الأول بينما قسم <code>VISA</code> في
-            آخر الإيصال يقول «لا يوجد عمليات». هذا هو شكل الخطأ المعروف في الطابعة، حيث يُطبع
-            تحصيل ماستركارد تحت اسم فيزا. الشكلان متطابقان على الورق فلا يمكن التمييز بينهما
-            آليًا.
-          </p>
-          <label>
-            <input
-              type="checkbox"
-              checked={treatVisaAsMastercard}
-              onChange={(event) => onTreatVisaAsMastercard(event.target.checked)}
-            />{' '}
-            احتسب المبلغ ماستركارد بدل فيزا
-          </label>
-        </div>
-      )}
+        {entered.size > 0 && (
+          <div className="notice no-print">
+            <p className="warn">
+              {[...entered].map((card) => CARD_LABELS[card]).join('، ')} — أُدخلت يدويًا ولم
+              تُقرأ من الإيصال. تُحتسب في التقرير وفي القالب كما كتبتها.
+            </p>
+            <button type="button" onClick={() => entered.forEach((card) => onEnterCard(card, ''))}>
+              استرجاع المقروء من الإيصال
+            </button>
+          </div>
+        )}
+
+        {/*
+          * The paper is not always still on the counter when a figure turns out
+          * to be missing, so the photograph stays where the figure is typed.
+          */}
+        {photos.length > 0 && (
+          <div className="receipt-photos no-print">
+            <p className="muted">الإيصالات المصوّرة — اضغط الصورة لتكبيرها وقراءة المبلغ منها:</p>
+            <div className="receipt-strip">
+              {photos.map((photo) => (
+                <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer">
+                  <img src={photo.url} alt={photo.name} />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {visaMayBeMastercard && (
+          <div className="notice no-print">
+            <p className="warn">
+              إيصال مدى يحمل مبلغًا في قسم <code>visa</code> الأول بينما قسم <code>VISA</code>{' '}
+              في آخر الإيصال يقول «لا يوجد عمليات». هذا هو شكل الخطأ المعروف في الطابعة، حيث
+              يُطبع تحصيل ماستركارد تحت اسم فيزا. الشكلان متطابقان على الورق فلا يمكن التمييز
+              بينهما آليًا.
+            </p>
+            <label>
+              <input
+                type="checkbox"
+                checked={treatVisaAsMastercard}
+                onChange={(event) => onTreatVisaAsMastercard(event.target.checked)}
+              />{' '}
+              احتسب المبلغ ماستركارد بدل فيزا
+            </label>
+          </div>
+        )}
+      </Collapsible>
     </section>
   )
 }

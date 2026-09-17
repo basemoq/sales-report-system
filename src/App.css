@@ -827,9 +827,29 @@ input[type='text']:focus {
 
 /* ---------- card figures typed in by hand ---------- */
 
+/*
+ * The four collection columns share the width evenly, and each cell is free to
+ * be narrower than the number in it would like: without that, an input keeps
+ * its own default width, the cells stop matching their headings, and a figure
+ * is clipped — 130.25 was showing as 0.25, which is money read wrong.
+ */
+.cards-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.cards-table th,
+.cards-table td {
+  width: 25%;
+  min-width: 0;
+  padding-inline: 0.35rem;
+  text-align: center;
+}
+
 /* A figure the scan could not read is typed straight into its own cell. */
 .cell-input {
   width: 100%;
+  min-width: 0;
   min-height: 2.5rem;
   padding: 0.25rem 0.4rem;
   border: 1px solid transparent;
@@ -848,6 +868,13 @@ input[type='text']:focus {
   border-color: var(--brand);
   outline: none;
   box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+/* A nil figure, faint enough that typing over it does not start with deleting
+   it — and unmistakably not a figure someone put there. */
+.cell-input::placeholder {
+  color: var(--muted);
+  opacity: 0.55;
 }
 
 /* Typed in, not read: the report says which is which. */
