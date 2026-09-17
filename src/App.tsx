@@ -74,6 +74,10 @@ export default function App() {
   const [enteredCards, setEnteredCards] = useState<
     Partial<Record<keyof CardTotals, string>>
   >({})
+  /** A code read off a picked photograph, kept apart from the day's figures. */
+  const [scannedCode, setScannedCode] = useState<
+    { code: string; payload: string | null } | null
+  >(null)
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [savedCount, setSavedCount] = useState(0)
 
@@ -143,8 +147,6 @@ export default function App() {
     }
   }
 
-  // The first code any of the day's photographs carried, if one did.
-  const scannedCode = report?.scannedCodes[0] ?? null
 
   async function fillTemplate() {
     if (report === null || figures === null) return
@@ -188,7 +190,7 @@ export default function App() {
         supervisors={SUPERVISORS}
       />
 
-      <UploadPanel onBuilt={onBuilt} />
+      <UploadPanel onBuilt={onBuilt} onCode={setScannedCode} />
 
       {/* The three figures the day is judged by, before and after the reading. */}
       <SummaryStrip figures={figures} />
@@ -332,7 +334,7 @@ export default function App() {
         <Collapsible
           title="قراءة باركود الإيصال"
           icon="scan"
-          count={report?.scannedCodes.length || undefined}
+          count={scannedCode === null ? undefined : 1}
           open={scannedCode !== null}
         >
           <ScanPanel transactions={report?.transactions ?? []} found={scannedCode} />

@@ -32,18 +32,96 @@ function loadJsqr() {
   return jsqr
 }
 
+/**
+ * ZXing, compiled to WebAssembly: the reader that covers the striped codes as
+ * well as the square ones.
+ *
+ * `BarcodeDetector` reads both but is missing from Safari altogether and from
+ * Android phones whose barcode module was never installed, and jsQR only ever
+ * reads QR. A receipt prints whichever its till was set up for, so on those
+ * phones a striped code could not be read at all — which is what a receipt in
+ * hand would have shown.
+ *
+ * ~800KB, fetched the first time a code is actually looked for, and served by
+ * this app rather than a CDN for the same reason the OCR engine is.
+ */
+let zxing: Promise<typeof import('zxing-wasm/reader')> | null = null
+
+function loadZxing() {
+  zxing ??= import('zxing-wasm/reader').then((module) => {
+    const base = import.meta.env?.BASE_URL ?? '/'
+    module.prepareZXingModule({
+      overrides: {
+        locateFile: (path: string, prefix: string) =>
+          path.endsWith('.wasm')
+            ? `${base.endsWith('/') ? base : `${base}/`}barcode/${path}`
+            : `${prefix}${path}`,
+      },
+    })
+    return module
+  })
+  return zxing
+}
+
 /** The text of the first code found in the frame, or null when there is none. */
 export async function readCode(frame: ImageData): Promise<string | null> {
   const detector = nativeDetector()
   if (detector) {
-    const canvas = new OffscreenCanvas(frame.width, frame.height)
-    canvas.getContext('2d')?.putImageData(frame, 0, 0)
-    const found = await detector.detect(canvas as unknown as CanvasImageSource)
-    if (found.length > 0) return found[0].rawValue
+    try {
+      const canvas = new OffscreenCanvas(frame.width, frame.height)
+      canvas.getContext('2d')?.putImageData(frame, 0, 0)
+      const found = await detector.detect(canvas as unknown as CanvasImageSource)
+      if (found.length > 0) return found[0].rawValue
+    } catch {
+      // A detector that exists but cannot read this frame is not the end of it.
+    }
   }
 
   const decode = await loadJsqr()
-  return decode(frame.data, frame.width, frame.height)?.data ?? null
+  const qr = decode(frame.data, frame.width, frame.height)?.data
+  if (qr !== undefined) return qr
+
+  try {
+    const { readBarcodes } = await loadZxing()
+    const found = await readBarcodes(frame, { tryHarder: true })
+    return found.find((result) => result.text !== '')?.text ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The code printed on a photograph, if it carries one.
+ *
+ * A receipt is photographed for its figures, and the same photograph usually
+ * has its code on it. Reading it here rather than while the day's report is
+ * built keeps the two apart: a picture of a code is worth reading whether or
+ * not there are any figures to go with it.
+ */
+export async function readCodeFromImage(
+  bytes: ArrayBuffer,
+): Promise<{ code: string; payload: string | null } | null> {
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(new Blob([bytes]))
+  } catch {
+    return null
+  }
+
+  try {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (context === null) return null
+    context.drawImage(bitmap, 0, 0)
+
+    const code = await readCode(context.getImageData(0, 0, canvas.width, canvas.height))
+    if (code === null) return null
+    return { code, payload: await decodeCodePayload(code) }
+  } catch {
+    return null
+  } finally {
+    bitmap.close()
+  }
 }
 
 /**
