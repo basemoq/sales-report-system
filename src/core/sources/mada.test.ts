@@ -206,6 +206,77 @@ describe('parseMadaReconciliation', () => {
 })
 
 describe('a receipt read off a scan', () => {
+  it('finds the section heads on a slip photographed at an angle', () => {
+    // A slip laid on a counter tilts, and its left edge drifts down the page —
+    // measured at 37 points on a real photo against a margin tolerance of six.
+    const skew = (items: PdfTextItem[]): PdfTextItem[] =>
+      items.map((item) => ({ ...item, x: item.x + (item.y - 300) * 0.02 }))
+
+    const report = parseMadaReconciliation(
+      skew([...head(), ...scheme(629, 'SPAN', 16, '3987.81')]),
+    )
+
+    expect(report.cards.mada).toBe(3987.81)
+  })
+
+  it('ignores a speck of the desk sitting further left than the receipt', () => {
+    const report = parseMadaReconciliation([
+      ...head(),
+      ...scheme(629, 'SPAN', 16, '3987.81'),
+      // One word off the paper used to be taken for the page margin, and then
+      // no section head stood at it: every figure came back zero.
+      at(500, '.', -60),
+    ])
+
+    expect(report.cards.mada).toBe(3987.81)
+  })
+
+  it('puts back a decimal point the scan dropped from a total', () => {
+    const items = [
+      ...head(),
+      ...scheme(629, 'SPAN', 9, '124590'),
+      at(560, 'TOTAL DB'),
+      at(560, '9', 308),
+      at(560, '1245.90', 386),
+    ]
+
+    const report = parseMadaReconciliation(items)
+    // A hundred times the debit is not a second opinion on the amount; it is
+    // the same figure with its point missing.
+    expect(report.cards.mada).toBe(1245.9)
+    expect(report.disagreements).toEqual([])
+  })
+
+  it('names a section whose heading was read but whose figure was not', () => {
+    const report = parseMadaReconciliation([
+      ...head(),
+      ...scheme(900, 'SPAN', 9, '1245.90'),
+      // The strip was cut off below the heading, or the print was too faint.
+      at(400, 'VISA'),
+    ])
+
+    // Not the same as a section that settled nothing, and not reported as zero.
+    expect(report.unread).toEqual(['VISA'])
+    expect(report.cards.visa).toBe(0)
+  })
+
+  it('reads the receipt\'s verdict when the scan left only half of it', () => {
+    const items = [...head(), ...scheme(629, 'SPAN', 9, '1245.90')].map((item) =>
+      item.text === 'TotalsMatched' ? { ...item, text: 'MATCHED' } : item,
+    )
+
+    expect(parseMadaReconciliation(items).totalsMatched).toBe(true)
+  })
+
+  it('never reads a failed reconciliation as a passed one', () => {
+    const items = [...head(), ...scheme(629, 'SPAN', 9, '1245.90')].map((item) =>
+      item.text === 'TotalsMatched' ? { ...item, text: 'TOTALS NOT MATCHED' } : item,
+    )
+
+    expect(parseMadaReconciliation(items).totalsMatched).toBe(false)
+  })
+
+
   it('reads the domestic section when it is headed SPAN rather than mada', () => {
     // الشبكة السعودية: the network's own name, printed instead of the brand,
     // with `mada HOST` as its subsection.

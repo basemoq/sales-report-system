@@ -37,6 +37,7 @@ const mada = (
   schemes: [],
   cards,
   unmapped: [],
+  unread: [],
   disagreements: [],
   totalsMatched: true,
   visaMayBeMastercard: false,
