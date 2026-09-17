@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   applyManualCards,
   fillDailyTemplate,
@@ -23,7 +23,6 @@ import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
 import { Stepper } from './ui/Stepper'
 import { SummaryStrip } from './ui/SummaryStrip'
-import { ScanPanel } from './ui/ScanPanel'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
 import { reportFileName } from './ui/format'
@@ -74,12 +73,25 @@ export default function App() {
   const [enteredCards, setEnteredCards] = useState<
     Partial<Record<keyof CardTotals, string>>
   >({})
-  /** A code read off a picked photograph, kept apart from the day's figures. */
-  const [scannedCode, setScannedCode] = useState<
-    { code: string; payload: string | null } | null
-  >(null)
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [savedCount, setSavedCount] = useState(0)
+
+  /**
+   * The header names are asked for once the files are read, not before.
+   *
+   * Nobody fills a form in to say who they are and then goes looking for the
+   * files; the day's work starts with the files. So the page is left alone
+   * until they are read, and then it goes back up to the two boxes that are
+   * still empty rather than letting the report be written without them.
+   */
+  const identityBox = useRef<HTMLDivElement>(null)
+  const pressing =
+    report !== null && (identity.showroom.trim() === '' || identity.supervisor.trim() === '')
+
+  useEffect(() => {
+    if (!pressing) return
+    identityBox.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [pressing])
 
   function onBuilt(built: DailyReportBuild) {
     setReport(built)
@@ -183,14 +195,17 @@ export default function App() {
         checked={report !== null && figures !== null}
       />
 
-      <IdentityPanel
-        identity={identity}
-        onChange={setIdentity}
-        showrooms={SHOWROOMS}
-        supervisors={SUPERVISORS}
-      />
+      <div ref={identityBox}>
+        <IdentityPanel
+          identity={identity}
+          onChange={setIdentity}
+          showrooms={SHOWROOMS}
+          supervisors={SUPERVISORS}
+          pressing={pressing}
+        />
+      </div>
 
-      <UploadPanel onBuilt={onBuilt} onCode={setScannedCode} />
+      <UploadPanel onBuilt={onBuilt} transactions={report?.transactions ?? []} />
 
       {/* The three figures the day is judged by, before and after the reading. */}
       <SummaryStrip figures={figures} />
@@ -324,22 +339,6 @@ export default function App() {
           </button>
         )}
       </section>
-
-      {/*
-        * A tool rather than a step, so it waits until it is asked for — unless
-        * an uploaded photograph already had a code on it, in which case what it
-        * found is on show.
-        */}
-      <div className="no-print">
-        <Collapsible
-          title="قراءة باركود الإيصال"
-          icon="scan"
-          count={scannedCode === null ? undefined : 1}
-          open={scannedCode !== null}
-        >
-          <ScanPanel transactions={report?.transactions ?? []} found={scannedCode} />
-        </Collapsible>
-      </div>
 
       {/* Kept out of .no-print so it carries onto the employee report PDF. */}
       <footer className="credit">© 2026 basem.alawalgy — جميع الحقوق محفوظة</footer>

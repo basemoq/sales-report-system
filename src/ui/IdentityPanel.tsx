@@ -7,11 +7,26 @@ interface Props {
   onChange: (identity: ReportIdentity) => void
   showrooms: readonly string[]
   supervisors: readonly string[]
+  /**
+   * Whether a name still missing is now worth saying so about.
+   *
+   * Empty boxes at the top of a page nobody has done anything on yet are not a
+   * fault, and a warning sitting there from the first second is one more thing
+   * to learn to ignore. It is worth saying once the files have been read and
+   * the report is a step away from being written with those boxes blank.
+   */
+  pressing?: boolean
 }
 
 const OTHER = '__other__'
 
-export function IdentityPanel({ identity, onChange, showrooms, supervisors }: Props) {
+export function IdentityPanel({
+  identity,
+  onChange,
+  showrooms,
+  supervisors,
+  pressing = false,
+}: Props) {
   // Which fields the operator switched to typing, so an emptied box stays open.
   const [typing, setTyping] = useState<Partial<Record<keyof ReportIdentity, boolean>>>({})
 
@@ -87,11 +102,13 @@ export function IdentityPanel({ identity, onChange, showrooms, supervisors }: Pr
         })}
       </div>
 
-      {missing.length > 0 && (
+      {pressing && missing.length > 0 && (
         <div className="note warn">
           <Icon name="warning" />
           <p>
-            {`سيخرج التقرير بخانة «${missing.map((field) => field.label).join('» و«')}» فارغة.`}
+            {`اكتملت قراءة الملفات. اختر ${missing
+              .map((field) => `«${field.label}»`)
+              .join(' و')} ليخرج التقرير كاملًا.`}
           </p>
         </div>
       )}
