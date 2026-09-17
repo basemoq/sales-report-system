@@ -1,4 +1,9 @@
-import { buildDailyFigures, refundSummary, type DailyFigures } from './dailyReport'
+import {
+  buildDailyFigures,
+  exclusionReport,
+  refundSummary,
+  type DailyFigures,
+} from './dailyReport'
 import { periodKey, toISODate } from './dates'
 import { deduplicateByHash, type DuplicateHit } from './dedupe'
 import { summarizeEmployees } from './employees'
@@ -60,6 +65,8 @@ export interface DailyReportBuild {
   visaMayBeMastercard: boolean
   /** Refund total taken off the figures, for showing beside them. */
   refundDeducted: number
+  /** Cancelled (Superseded) orders taken off the figures, for showing beside them. */
+  supersededExcluded: number
   figures: DailyFigures
   employees: EmployeeSummary[]
   /** The day's rows, for looking a receipt up by its barcode. */
@@ -227,6 +234,11 @@ export async function buildDailyReport(
   const refunds = refundSummary({ caco, detailed })
   warnings.push(...refunds.unplaced)
 
+  // Cancelled orders, unmapped summary rows and money that never reaches the
+  // drawer: each one moves a figure, so each one is said out loud.
+  const exclusions = exclusionReport({ caco, detailed })
+  warnings.push(...exclusions.warnings)
+
   if (mada?.totalsMatched === false) {
     warnings.push('إيصال مدى لا يُظهر تطابق المجاميع (TotalsMatched).')
   }
@@ -252,6 +264,7 @@ export async function buildDailyReport(
     shopId,
     visaMayBeMastercard: mada?.visaMayBeMastercard ?? false,
     refundDeducted: refunds.deducted,
+    supersededExcluded: exclusions.supersededExcluded,
     figures,
     employees: summarizeEmployees(detailed?.transactions ?? []),
     transactions: detailed?.transactions ?? [],

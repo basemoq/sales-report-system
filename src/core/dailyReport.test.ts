@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import {
   buildDailyFigures,
+  exclusionReport,
   fillDailyTemplate,
   reassignVisaToMastercard,
   refundSummary,
@@ -469,6 +470,95 @@ describe('refunds against a superseded sale', () => {
     expect(figures.bss.ordering).toBe(0)
   })
 
+  it('takes a superseded order no refund reverses out of the figures, and names it', () => {
+    // The shape from a real day: an order rung, superseded, then rung again for
+    // the same line four minutes later. Both rows sit in the export, and CACO's
+    // own total carries the amount twice.
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({
+            orderType: 'IPHONE 17 PRO MAX',
+            amount: 2820,
+            msisdn: '966567749195',
+            time: '9:33 PM',
+            salesOrderNumber: '1400633493',
+            status: 'Superseded',
+          }),
+          row({
+            orderType: 'IPHONE 17 PRO MAX',
+            amount: 2820,
+            msisdn: '966567749195',
+            time: '9:37 PM',
+            salesOrderNumber: '1533829387',
+            status: 'Processed',
+          }),
+        ],
+      },
+    }
+
+    expect(buildDailyFigures(sources).bss.ordering).toBe(2820)
+
+    const report = exclusionReport(sources)
+    expect(report.supersededExcluded).toBe(2820)
+    expect(report.warnings[0]).toContain('1400633493')
+    expect(report.warnings[0]).toContain('2820.00')
+  })
+
+  it('leaves a superseded order alone when a refund already reverses it', () => {
+    const sources = {
+      detailed: withRefund(
+        { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
+        { amount: -50, msisdn: '966501342646' },
+      ),
+    }
+
+    // Netted once by the refund, not twice by also excluding the original.
+    expect(buildDailyFigures(sources).bss.ordering).toBe(0)
+    expect(exclusionReport(sources).supersededExcluded).toBe(0)
+  })
+
+  it('says so rather than dropping a summary order type no template row covers', () => {
+    const sources = {
+      caco: caco([
+        { orderType: 'Sales Order Payment', total: 100 },
+        { orderType: 'Device Installment', total: 450 },
+      ]),
+    }
+
+    const warnings = exclusionReport(sources).warnings
+    expect(warnings.some((warning) => warning.includes('Device Installment'))).toBe(true)
+    expect(warnings.some((warning) => warning.includes('450.00'))).toBe(true)
+  })
+
+  it('keeps money that reaches neither the drawer nor the terminal out of the deposit', () => {
+    const summary = caco([{ orderType: 'Sales Order Payment', total: 300 }])
+    const withTransfer: CacoSummary = {
+      ...summary,
+      paymentMethods: ['Cash', 'SPAN Offline', 'Bank Transfer'],
+      rows: [
+        {
+          orderType: 'Sales Order Payment',
+          byMethod: { Cash: 100, 'SPAN Offline': 80, 'Bank Transfer': 120 },
+          total: 300,
+        },
+      ],
+    }
+    const figures = buildDailyFigures({ caco: withTransfer })
+
+    // A bank transfer is a real sale, so it stays in the total...
+    expect(figures.totalSales).toBe(300)
+    // ...but nobody hands it over at the end of the day.
+    expect(figures.offDrawerSales).toBe(120)
+    expect(figures.cashDeposit).toBe(180)
+    expect(exclusionReport({ caco: withTransfer }).warnings.join()).toContain('Bank Transfer')
+  })
+
   it('nets it off the summary too, which reports its refunds in a row of their own', () => {
     const detailedWithRefund = withRefund(
       { orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966501342646' },
@@ -493,9 +583,14 @@ describe('refunds against a superseded sale', () => {
       ),
     }
 
-    expect(buildDailyFigures(sources).bss.ordering).toBe(50)
+    // The refund is unplaced, so nothing is netted for it — but the original it
+    // failed to match is itself a superseded order no refund reverses, which is
+    // taken out on its own account and reported.
+    expect(buildDailyFigures(sources).bss.ordering).toBe(0)
     expect(refundSummary(sources).unplaced[0]).toContain('لم يُعثر على عمليته الأصلية')
     expect(refundSummary(sources).deducted).toBe(0)
+    expect(exclusionReport(sources).supersededExcluded).toBe(50)
+    expect(exclusionReport(sources).warnings[0]).toContain('Superseded')
   })
 
   it('does not reverse a sale twice with one refund each', () => {

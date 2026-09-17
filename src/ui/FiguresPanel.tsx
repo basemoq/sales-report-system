@@ -7,6 +7,8 @@ interface Props {
   reportDate: string
   /** Refunds already taken off the figures above; 0 when the day had none. */
   refundDeducted: number
+  /** Cancelled orders already taken off the figures above; 0 when there were none. */
+  supersededExcluded: number
   /** The mada receipt shows the shape that can mean Visa is really MasterCard. */
   visaMayBeMastercard: boolean
   treatVisaAsMastercard: boolean
@@ -17,6 +19,7 @@ export function FiguresPanel({
   figures,
   reportDate,
   refundDeducted,
+  supersededExcluded,
   visaMayBeMastercard,
   treatVisaAsMastercard,
   onTreatVisaAsMastercard,
@@ -67,6 +70,20 @@ export function FiguresPanel({
       {refundDeducted > 0 && (
         <p className="muted">
           يوجد عملية Refund — تم خصم {formatMoney(refundDeducted)} من التقرير.
+        </p>
+      )}
+
+      {supersededExcluded > 0 && (
+        <p className="muted">
+          يوجد عملية ملغاة (Superseded) بلا مرتجع — تم استبعاد{' '}
+          {formatMoney(supersededExcluded)} من التقرير. التفاصيل في التنبيهات.
+        </p>
+      )}
+
+      {figures.offDrawerSales > 0 && (
+        <p className="muted">
+          {formatMoney(figures.offDrawerSales)} حُصِّلت بوسيلة لا تدخل الصندوق ولا إيصال مدى،
+          فلم تُحتسب ضمن الإيداع النقدي.
         </p>
       )}
 

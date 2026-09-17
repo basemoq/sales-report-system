@@ -127,7 +127,11 @@ describe('buildDailyReport', () => {
     const report = await buildDailyReport([await cacoSummary()])
 
     expect(report.missingSources).toEqual(['TABS', 'موازنة مدى'])
-    expect(report.warnings).toEqual([])
+    // The one warning the summary alone earns: it carries no status column, so
+    // a cancelled order cannot be told from a completed one in it.
+    expect(report.warnings).toEqual([
+      'تقرير CACO المختصر لا يحمل حالة أمر البيع، فلا يمكن كشف العمليات الملغاة (Superseded) منه — ارفع التقرير المفصّل للتأكد.',
+    ])
   })
 
   it('completes without TABS, counting it as zero', async () => {
