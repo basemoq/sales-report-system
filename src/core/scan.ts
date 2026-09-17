@@ -112,6 +112,11 @@ export async function readCodeFromImage(
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (context === null) return null
+    // A code saved with a transparent ground — a screenshot, an export from a
+    // till's own app — is black on nothing, and nothing reads as black. Without
+    // the paper under it the decoder is handed a solid dark square.
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
     context.drawImage(bitmap, 0, 0)
 
     const code = await readCode(context.getImageData(0, 0, canvas.width, canvas.height))
