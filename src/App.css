@@ -714,6 +714,34 @@ input[type='text']:focus {
  * lays out the Arabic text correctly, so print the report and nothing else.
  */
 @media print {
+  /*
+   * A folded section still has to print. The employee report is downloaded by
+   * printing the page, so a closed `<details>` would hand over an empty PDF —
+   * the button would still be there and would still produce nothing.
+   */
+  .collapsible {
+    border: none;
+    background: transparent;
+  }
+
+  .collapsible > summary {
+    display: none;
+  }
+
+  .collapsible > *:not(summary) {
+    display: block !important;
+    content-visibility: visible !important;
+  }
+
+  .collapsible::details-content {
+    content-visibility: visible !important;
+    block-size: auto !important;
+  }
+
+  .collapsible-body {
+    padding: 0;
+  }
+
   .print-only {
     display: inline;
   }
@@ -869,4 +897,548 @@ input[type='text']:focus {
   border-radius: var(--radius);
   background: #fff;
   object-fit: contain;
+}
+
+/* ---------- stages ---------- */
+
+/* Where the day has reached. It reports state; it gates nothing. */
+.stepper ol {
+  display: flex;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.stepper li {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/*
+ * The line to the next stage. It starts at this circle's centre and runs
+ * towards the next one — which in a right-to-left row is the inline-end side,
+ * so the logical properties place it correctly in either direction.
+ */
+.stepper li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 1rem;
+  inset-inline-start: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line-strong);
+}
+
+.stepper li.is-done:not(:last-child)::after,
+.stepper li.is-current:not(:last-child)::after {
+  background: var(--brand);
+}
+
+.stepper .step-dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stepper li.is-current {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.stepper li.is-current .step-dot {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.stepper li.is-done {
+  color: var(--text);
+}
+
+.stepper li.is-done .step-dot {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* ---------- the three figures ---------- */
+
+.tile-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--brand-soft);
+  color: var(--brand);
+  flex: none;
+}
+
+.tile-icon .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.summary-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+
+/* An odd tile left over runs the full width rather than sitting half empty. */
+.summary-tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 40rem) {
+  .summary-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .summary-tile:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+.summary-tile {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'icon label' 'icon value' 'icon unit';
+  align-items: center;
+  gap: 0 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.summary-tile .tile-icon {
+  grid-area: icon;
+}
+
+.summary-label {
+  grid-area: label;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.summary-value {
+  grid-area: value;
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-unit {
+  grid-area: unit;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* ---------- sections that open and close ---------- */
+
+.collapsible {
+  margin-top: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.collapsible > summary,
+.file-rows summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+}
+
+.collapsible > summary::-webkit-details-marker,
+.file-rows summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-title {
+  flex: 1;
+}
+
+.collapsible-count {
+  min-width: 1.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--line);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.collapsible-arrow {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-inline-start: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+details[open] > summary .collapsible-arrow {
+  transform: rotate(135deg);
+}
+
+.collapsible-body {
+  padding: 0 0.85rem 0.85rem;
+}
+
+.collapsible.is-warn {
+  border-color: var(--warn, #b7791f);
+  background: var(--warn-soft, rgba(183, 121, 31, 0.12));
+}
+
+.collapsible.is-warn > summary {
+  color: var(--warn, #b7791f);
+}
+
+.collapsible.is-warn .collapsible-count {
+  background: rgba(183, 121, 31, 0.28);
+}
+
+/* ---------- uploading ---------- */
+
+.dropzone-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.dropzone-cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius);
+  color: var(--brand);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.hint {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.empty-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0.6rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.empty-line .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* A card inside a panel: the uploaded files, grouped under their own heading. */
+.panel-card {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.panel-card > h3,
+.report-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+
+.panel-card > h3 .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+}
+
+.file-rows {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-rows > li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.file-icon {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: none;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--line);
+  color: var(--muted);
+}
+
+.file-icon .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.file-icon.is-sheet {
+  background: rgba(34, 139, 94, 0.18);
+  color: #3fb27f;
+}
+
+.file-icon.is-pdf {
+  background: rgba(200, 62, 62, 0.18);
+  color: #e06a6a;
+}
+
+.file-icon.is-image {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.file-main {
+  flex: 1;
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  /* These names are the moment an export was generated, so they are long and
+     all alike. Cut to one line from the end, which is the part that repeats;
+     the row opens to show the whole thing. Latin names read left to right even
+     inside this right-to-left page, so the cut lands where a reader expects. */
+  direction: ltr;
+  text-align: start;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.file-detail .file-full {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.file-size {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.pill {
+  flex: none;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.pill.is-ok {
+  background: rgba(34, 139, 94, 0.18);
+  color: #3fb27f;
+}
+
+.pill.is-warn {
+  background: rgba(183, 121, 31, 0.2);
+  color: #d9a441;
+}
+
+.pill.is-waiting {
+  background: var(--line);
+  color: var(--muted);
+}
+
+.file-detail {
+  padding: 0 0.85rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.file-detail p {
+  margin: 0 0 0.5rem;
+}
+
+/* ---------- the reading came out clean ---------- */
+
+.done-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(34, 139, 94, 0.5);
+  border-radius: var(--radius);
+  background: rgba(34, 139, 94, 0.12);
+}
+
+.done-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 50%;
+  background: #2f9e6e;
+  color: #fff;
+}
+
+.done-mark .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.done-panel h3 {
+  margin: 0 0 0.3rem;
+  color: #3fb27f;
+  font-size: 0.95rem;
+}
+
+.done-panel ul {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* ---------- one card per report ---------- */
+
+.report-cards {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+}
+
+.report-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--head);
+}
+
+.report-body {
+  min-width: 0;
+}
+
+.report-card h3 {
+  margin: 0 0 0.2rem;
+}
+
+.report-card p {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.45rem !important;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.report-meta span:not(:last-child)::after {
+  content: ' |';
+  color: var(--line-strong);
+}
+
+.report-card > button {
+  grid-column: 1 / -1;
+}
+
+.empty-reports {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 1.5rem 1rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.empty-reports .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--muted);
+}
+
+.empty-reports p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+/* The one action the day ends with. */
+.primary-wide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  font-size: 1rem;
+}
+
+.primary-wide .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* The reports section holds panels of its own; they should not nest visually. */
+.reports .panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Icons inherit their box from the text around them, so anywhere they sit in a
+   flex or grid row they need their size stated or they stretch to fill it. */
+.collapsible > summary .icon,
+.report-card h3 .icon,
+.done-panel h3 .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
 }

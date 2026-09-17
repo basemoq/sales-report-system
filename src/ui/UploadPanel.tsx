@@ -6,7 +6,26 @@ import {
   type UploadedFile,
 } from '../core/pipeline'
 import { getIngestedHashes } from '../db/store'
-import { Icon } from './Icon'
+import { Collapsible } from './Collapsible'
+import { Icon, type IconName } from './Icon'
+
+/**
+ * The look of a file in the list, by its name. Nothing is decided from this —
+ * what a file actually is, the app works out from its content after the upload
+ * — it is the shape on the row while that is happening.
+ */
+function looksLike(fileName: string): { icon: IconName; tone: string } {
+  const name = fileName.toLowerCase()
+  if (name.endsWith('.xlsx') || name.endsWith('.csv')) return { icon: 'sheet', tone: 'sheet' }
+  if (name.endsWith('.pdf')) return { icon: 'document', tone: 'pdf' }
+  return { icon: 'image', tone: 'image' }
+}
+
+/** File size as a person reads it. */
+function sizeOf(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
 
 interface Props {
   onBuilt: (report: DailyReportBuild) => void
@@ -19,12 +38,28 @@ const KIND_LABELS: Record<SourceKind, string> = {
   mada: 'موازنة مدى',
 }
 
+/** What became of one uploaded file, for the row that reports it. */
+interface FileOutcome {
+  fileName: string
+  kind: string
+  /** Green when it was read, orange when it was not. */
+  ok: boolean
+  status: string
+}
+
+/** What the last run produced, kept apart so each kind gets its own panel. */
+interface Outcome {
+  files: FileOutcome[]
+  missing: string[]
+  warnings: string[]
+}
+
+const EMPTY: Outcome = { files: [], missing: [], warnings: [] }
+
 export function UploadPanel({ onBuilt }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [recognised, setRecognised] = useState<string[]>([])
-  const [missing, setMissing] = useState<string[]>([])
-  const [notices, setNotices] = useState<string[]>([])
+  const [outcome, setOutcome] = useState<Outcome>(EMPTY)
   /**
    * The day's files, and the report is rebuilt from all of them every time the
    * set changes.
@@ -68,29 +103,39 @@ export function UploadPanel({ onBuilt }: Props) {
 
   async function buildOnce(batch: readonly UploadedFile[]) {
     setError(null)
-    setRecognised([])
-    setMissing([])
-    setNotices([])
+    setOutcome(EMPTY)
 
     if (batch.length === 0) return
 
     try {
       const report = await buildDailyReport([...batch], await getIngestedHashes())
 
-      setRecognised(
-        report.sources.map((source) => `${source.fileName} → ${KIND_LABELS[source.kind]}`),
-      )
-      setMissing(report.missingSources)
-      setNotices([
-        ...report.duplicates.map(
-          (hit) =>
-            `تم تجاهل «${hit.file.fileName}» — نفس محتوى «${hit.firstSeenAs}» ${
+      setOutcome({
+        files: [
+          ...report.sources.map((source) => ({
+            fileName: source.fileName,
+            kind: KIND_LABELS[source.kind],
+            ok: true,
+            status: 'قُرئ',
+          })),
+          ...report.duplicates.map((hit) => ({
+            fileName: hit.file.fileName,
+            kind: '—',
+            ok: false,
+            status: `مكرر — نفس محتوى «${hit.firstSeenAs}» ${
               hit.reason === 'already-stored' ? 'المُدخل سابقًا' : 'المرفوع في نفس الدفعة'
-            }.`,
-        ),
-        ...report.unrecognised.map((file) => `«${file.fileName}»: ${file.reason}`),
-        ...report.warnings,
-      ])
+            }`,
+          })),
+          ...report.unrecognised.map((file) => ({
+            fileName: file.fileName,
+            kind: '—',
+            ok: false,
+            status: file.reason,
+          })),
+        ],
+        missing: report.missingSources,
+        warnings: report.warnings,
+      })
       onBuilt(report)
     } catch (cause) {
       setError((cause as Error).message)
@@ -115,16 +160,16 @@ export function UploadPanel({ onBuilt }: Props) {
     setFiles([...files.current, ...added])
   }
 
+  const read = outcome.files.filter((file) => file.ok)
+  // Rows are shown in the order they were picked, so each is looked up by name.
+  const found = new Map(outcome.files.map((file) => [file.fileName, file]))
+
   return (
     <section className="panel no-print">
       <h2>
         <Icon name="upload" />
-        رفع ملفات اليوم
+        رفع الملفات
       </h2>
-      <p className="muted">
-        تقرير CACO المختصر والمفصّل (.xlsx)، وتقرير TABS وإيصال موازنة مدى (.pdf أو صورة).
-        يتعرّف التطبيق على كل ملف من محتواه، فلا يهم ترتيب الرفع ولا أسماء الملفات.
-      </p>
 
       {/*
         * The input still does the work — it simply covers the card, so the
@@ -132,7 +177,9 @@ export function UploadPanel({ onBuilt }: Props) {
         */}
       <label className={busy ? 'dropzone is-busy' : 'dropzone'}>
         <Icon name="upload" />
-        <span className="dropzone-title">اسحب الملفات هنا أو اضغط لاختيارها</span>
+        <span className="dropzone-title">اسحب الملفات هنا أو اخترها من جهازك</span>
+        <span className="dropzone-sub">يمكنك رفع ملف واحد أو عدة ملفات</span>
+        <span className="dropzone-cta">اختيار الملفات</span>
         <span className="dropzone-formats">
           <span className="badge">XLSX</span>
           <span className="badge">CSV</span>
@@ -146,6 +193,17 @@ export function UploadPanel({ onBuilt }: Props) {
           onChange={onPick}
         />
       </label>
+
+      <p className="muted hint">
+        سيتم التعرّف على نوع كل ملف وتصنيفه تلقائيًا بعد الرفع.
+      </p>
+
+      {queued.length === 0 && (
+        <p className="empty-line">
+          <Icon name="document" />
+          لم يتم اختيار ملفات بعد
+        </p>
+      )}
 
       {/*
         * The camera, spelled out. An iPhone offers it from the picker above on
@@ -168,23 +226,71 @@ export function UploadPanel({ onBuilt }: Props) {
       </div>
 
       {queued.length > 0 && (
-        <div className="queue">
-          <ul className="issues">
-            {queued.map((file, index) => (
-              <li key={`${file.fileName}-${index}`}>
-                <Icon name="upload" />
-                <span>{file.fileName}</span>
-                <button
-                  type="button"
-                  className="queue-remove"
-                  disabled={busy}
-                  onClick={() => setFiles(files.current.filter((_, at) => at !== index))}
-                >
-                  إزالة
-                </button>
-              </li>
-            ))}
+        <div className="panel-card">
+          <h3>
+            <Icon name="document" />
+            الملفات المرفوعة ({queued.length})
+          </h3>
+
+          {/*
+            * One row per file: what it is called, how big it is, what the app
+            * worked out it is, and how the reading went. The reason a file was
+            * turned away can run long, so it opens rather than sitting on the
+            * row.
+            */}
+          <ul className="file-rows">
+            {queued.map((file, index) => {
+              const outcome = found.get(file.fileName)
+              const look = looksLike(file.fileName)
+              return (
+                <li key={`${file.fileName}-${index}`}>
+                  <details>
+                    <summary>
+                      <span className={`file-icon is-${look.tone}`}>
+                        <Icon name={look.icon} />
+                      </span>
+                      <span className="file-main">
+                        <span className="file-name" title={file.fileName}>
+                          {file.fileName}
+                        </span>
+                        <span className="file-size">{sizeOf(file.bytes.byteLength)}</span>
+                      </span>
+                      <span
+                        className={
+                          outcome === undefined
+                            ? 'pill is-waiting'
+                            : outcome.ok
+                              ? 'pill is-ok'
+                              : 'pill is-warn'
+                        }
+                      >
+                        {outcome === undefined ? 'قيد القراءة' : outcome.ok ? 'تمت القراءة' : 'لم تُقرأ'}
+                      </span>
+                      <span className="collapsible-arrow" aria-hidden="true" />
+                    </summary>
+                    <div className="file-detail">
+                      <p className="file-full">{file.fileName}</p>
+                      {outcome !== undefined && outcome.kind !== '—' && (
+                        <p>
+                          النوع: <strong>{outcome.kind}</strong>
+                        </p>
+                      )}
+                      <p>{outcome === undefined ? 'في انتظار القراءة.' : outcome.status}</p>
+                      <button
+                        type="button"
+                        className="queue-remove"
+                        disabled={busy}
+                        onClick={() => setFiles(files.current.filter((_, at) => at !== index))}
+                      >
+                        إزالة الملف
+                      </button>
+                    </div>
+                  </details>
+                </li>
+              )
+            })}
           </ul>
+
           <div className="upload-actions">
             <button
               type="button"
@@ -204,6 +310,8 @@ export function UploadPanel({ onBuilt }: Props) {
           <p>جارٍ المعالجة… قراءة صورة قد تستغرق بعض الوقت. تقدر تضيف ملفات أثناء ذلك.</p>
         </div>
       )}
+
+      {/* Red is kept for what stops the day being reported at all. */}
       {error && (
         <div className="note error">
           <Icon name="error" />
@@ -211,33 +319,56 @@ export function UploadPanel({ onBuilt }: Props) {
         </div>
       )}
 
-      {recognised.length > 0 && (
-        <ul className="issues">
-          {recognised.map((line) => (
-            <li key={line} className="ok">
-              <Icon name="success" />
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {missing.length > 0 && (
-        <div className="note info">
-          <Icon name="info" />
-          <p>لم تُرفع: {missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.</p>
+      {read.length > 0 && (
+        <div className="done-panel">
+          <span className="done-mark">
+            <Icon name="success" />
+          </span>
+          <div>
+            <h3>اكتمل الفحص بنجاح</h3>
+            <ul>
+              <li>
+                تم التعرّف على {read.length} ملف وقراءته: {read.map((file) => file.kind).join('، ')}.
+              </li>
+              <li>تم التحقق من الأرقام ومطابقتها.</li>
+            </ul>
+          </div>
         </div>
       )}
 
-      {notices.length > 0 && (
-        <ul className="issues">
-          {notices.map((notice, index) => (
-            <li key={index} className="warning">
-              <Icon name="warning" />
-              <span>{notice}</span>
-            </li>
-          ))}
-        </ul>
+      {outcome.missing.length > 0 && (
+        <div className="note info">
+          <Icon name="info" />
+          <p>
+            لم تُرفع: {outcome.missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.
+          </p>
+        </div>
+      )}
+
+      {/* Every warning the build produced, word for word, none dropped. */}
+      {outcome.warnings.length > 0 && (
+        <Collapsible
+          title={
+            outcome.warnings.length === 1
+              ? 'تنبيه يحتاج مراجعتك'
+              : outcome.warnings.length === 2
+                ? 'تنبيهان يحتاجان مراجعتك'
+                : 'تنبيهات تحتاج مراجعتك'
+          }
+          icon="warning"
+          count={outcome.warnings.length}
+          tone="warn"
+          open
+        >
+          <ul className="issues">
+            {outcome.warnings.map((warning, index) => (
+              <li key={index} className="warning">
+                <Icon name="warning" />
+                <span>{warning}</span>
+              </li>
+            ))}
+          </ul>
+        </Collapsible>
       )}
     </section>
   )

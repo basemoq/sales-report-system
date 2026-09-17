@@ -16,10 +16,13 @@ import {
   ReportExistsError,
   saveReport,
 } from './db/store'
+import { Collapsible } from './ui/Collapsible'
 import { EmployeesPanel } from './ui/EmployeesPanel'
 import { FiguresPanel } from './ui/FiguresPanel'
 import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
+import { Stepper } from './ui/Stepper'
+import { SummaryStrip } from './ui/SummaryStrip'
 import { ScanPanel } from './ui/ScanPanel'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
@@ -168,107 +171,161 @@ export default function App() {
         </div>
       </header>
 
+      {/* A read-out of where the day has reached; it gates nothing. */}
+      <Stepper
+        identity={identity.showroom.trim() !== '' && identity.supervisor.trim() !== ''}
+        files={report !== null}
+        checked={report !== null && figures !== null}
+      />
+
       <IdentityPanel
         identity={identity}
         onChange={setIdentity}
         showrooms={SHOWROOMS}
         supervisors={SUPERVISORS}
       />
+
       <UploadPanel onBuilt={onBuilt} />
-      <ScanPanel transactions={report?.transactions ?? []} />
+
+      {/* The three figures the day is judged by, before and after the reading. */}
+      <SummaryStrip figures={figures} />
 
       {report && figures && (
-        <>
-          <FiguresPanel
-            figures={figures}
-            reportDate={report.reportDate}
-            refundDeducted={report.refundDeducted}
-            supersededExcluded={report.supersededExcluded}
-            visaMayBeMastercard={report.visaMayBeMastercard}
-            treatVisaAsMastercard={visaIsMastercard}
-            enteredCards={enteredCards}
-            onEnterCard={(card, value) =>
-              setEnteredCards((current) => ({ ...current, [card]: value }))
-            }
-            receiptImages={report.receiptImages}
-            onTreatVisaAsMastercard={setVisaIsMastercard}
-          />
+        <FiguresPanel
+          figures={figures}
+          reportDate={report.reportDate}
+          refundDeducted={report.refundDeducted}
+          supersededExcluded={report.supersededExcluded}
+          visaMayBeMastercard={report.visaMayBeMastercard}
+          treatVisaAsMastercard={visaIsMastercard}
+          enteredCards={enteredCards}
+          onEnterCard={(card, value) =>
+            setEnteredCards((current) => ({ ...current, [card]: value }))
+          }
+          receiptImages={report.receiptImages}
+          onTreatVisaAsMastercard={setVisaIsMastercard}
+        />
+      )}
 
-          <section className="panel no-print">
-            <h2>
-              <Icon name="download" />
-              الإخراج
-            </h2>
-            <div className="actions">
-              <button type="button" onClick={fillTemplate}>
-                تعبئة القالب وتنزيله
-              </button>
+      {/* Every report in one place, one card each. */}
+      <section className="panel reports">
+        <h2 className="no-print">
+          <Icon name="archive" />
+          التقارير
+        </h2>
 
+        {report === null || figures === null ? (
+          <div className="empty-reports">
+            <Icon name="document" />
+            <p>ستظهر التقارير بعد اكتمال الفحص</p>
+            <p className="muted">ارفع الملفات لتبدأ المعالجة</p>
+          </div>
+        ) : (
+          <div className="report-cards no-print">
+            <article className="report-card">
+              <span className="tile-icon">
+                <Icon name="chart" />
+              </span>
+              <div className="report-body">
+                <h3>التقرير اليومي</h3>
+                <p className="muted">قالب المعرض معبّأ بأرقام اليوم — مبيعات ومدفوعات وإيداع.</p>
+                <p className="report-meta">
+                  <span>{report.reportDate}</span>
+                  <span>XLSX</span>
+                  <span>{report.sources.length} مصدر</span>
+                </p>
+              </div>
               {save.kind === 'confirm-replace' ? (
-                <>
-                  <div className="note warn">
-                    <Icon name="warning" />
-                    <p>
-                      يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
-                      {save.existingCreatedAt &&
-                        ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
-                      . الاستبدال نهائي ولا يمكن التراجع عنه.
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => persist(true)}>
-                    تأكيد الاستبدال
-                  </button>
-                  <button type="button" className="link" onClick={() => setSave({ kind: 'idle' })}>
-                    إلغاء
-                  </button>
-                </>
+                <button type="button" onClick={() => persist(true)}>
+                  تأكيد الاستبدال
+                </button>
               ) : (
-                <button type="button" onClick={() => persist(false)}>
+                <button type="button" className="ghost" onClick={() => persist(false)}>
                   حفظ التقرير
                 </button>
               )}
+            </article>
 
-              {save.kind === 'saved' && (
+            {save.kind === 'confirm-replace' && (
+              <div className="note warn">
+                <Icon name="warning" />
+                <p>
+                  يوجد تقرير محفوظ لهذا المعرض بتاريخ {report.reportDate}
+                  {save.existingCreatedAt && ` (حُفظ في ${save.existingCreatedAt.slice(0, 10)})`}
+                  . الاستبدال نهائي ولا يمكن التراجع عنه.{' '}
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => setSave({ kind: 'idle' })}
+                  >
+                    إلغاء
+                  </button>
+                </p>
+              </div>
+            )}
+            {save.kind === 'saved' && (
+              <div className="note ok">
+                <Icon name="success" />
+                <p>تم حفظ التقرير.</p>
+              </div>
+            )}
+            {save.kind === 'error' && (
+              <div className="note error">
+                <Icon name="error" />
+                <p>{save.message}</p>
+              </div>
+            )}
+            {fill.kind === 'done' && (
+              <>
                 <div className="note ok">
                   <Icon name="success" />
-                  <p>تم حفظ التقرير.</p>
+                  <p>تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
                 </div>
-              )}
-              {save.kind === 'error' && (
-                <div className="note error">
-                  <Icon name="error" />
-                  <p>{save.message}</p>
-                </div>
-              )}
-
-              {fill.kind === 'done' && (
-                <>
-                  <div className="note ok">
-                    <Icon name="success" />
-                    <p>تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
+                {fill.warnings.map((warning) => (
+                  <div key={warning} className="note warn">
+                    <Icon name="warning" />
+                    <p>{warning}</p>
                   </div>
-                  {fill.warnings.map((warning) => (
-                    <div key={warning} className="note warn">
-                      <Icon name="warning" />
-                      <p>{warning}</p>
-                    </div>
-                  ))}
-                </>
-              )}
-              {fill.kind === 'error' && (
-                <div className="note error">
-                  <Icon name="error" />
-                  <p>{fill.message}</p>
-                </div>
-              )}
-            </div>
-          </section>
+                ))}
+              </>
+            )}
+            {fill.kind === 'error' && (
+              <div className="note error">
+                <Icon name="error" />
+                <p>{fill.message}</p>
+              </div>
+            )}
+          </div>
+        )}
 
-          <EmployeesPanel employees={report.employees} reportDate={report.reportDate} />
-        </>
-      )}
+        {report && (
+          <Collapsible title="تقرير الموظفين" icon="users" count={report.employees.length}>
+            <EmployeesPanel employees={report.employees} reportDate={report.reportDate} />
+          </Collapsible>
+        )}
 
-      <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
+        <Collapsible title="التقارير المحفوظة" icon="archive">
+          <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
+        </Collapsible>
+
+        {/*
+          * The one action the day ends with. It is the only button that fills
+          * and downloads the template, so nothing repeats it above.
+          */}
+        {report && figures && (
+          <button type="button" className="primary-wide no-print" onClick={fillTemplate}>
+            <Icon name="download" />
+            تنزيل التقرير النهائي
+          </button>
+        )}
+      </section>
+
+      {/* A tool rather than a step, so it waits until it is asked for. */}
+      <div className="no-print">
+        <Collapsible title="قراءة باركود الإيصال" icon="scan">
+          <ScanPanel transactions={report?.transactions ?? []} />
+        </Collapsible>
+      </div>
 
       {/* Kept out of .no-print so it carries onto the employee report PDF. */}
       <footer className="credit">© 2026 basem.alawalgy — جميع الحقوق محفوظة</footer>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import type { DailyFigures } from '../core/dailyReport'
 import type { UploadedFile } from '../core/pipeline'
+import { Collapsible } from './Collapsible'
 import type { CardTotals } from '../core/sources/mada'
 import { formatMoney } from './format'
 import { Icon } from './Icon'
@@ -86,9 +87,16 @@ export function FiguresPanel({
     <section className="panel" id="figures">
       <h2>
         <Icon name="report" />
-        تقرير مبيعات المعارض اليومي — {reportDate}
+        التحقق من الأرقام — {reportDate}
       </h2>
 
+      {/*
+        * The six system rows, folded away by default: the three figures that
+        * matter are in the summary at the top of the page, and this is the
+        * working behind them. It still prints, so the report on paper is
+        * unchanged.
+        */}
+      <Collapsible title="تفاصيل الأنظمة" icon="report" count={systemRows.length}>
       <div className="table-scroll">
         <table className="data-table">
           <thead>
@@ -115,6 +123,8 @@ export function FiguresPanel({
           </tfoot>
         </table>
       </div>
+
+      </Collapsible>
 
       {refundDeducted > 0 && (
         <p className="muted">
