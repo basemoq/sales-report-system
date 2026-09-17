@@ -27,8 +27,8 @@ import { reportFileName } from './ui/format'
 import './App.css'
 
 /** Names offered in the header pickers; anything else is typed under «أخرى». */
-const SHOWROOMS = ['الشرائع']
-const SUPERVISORS = ['باسم العولقي']
+const SHOWROOMS = ['الشرائع', 'العوالي']
+const SUPERVISORS = ['باسم العولقي', 'نزار فلمبان']
 
 type SaveState =
   | { kind: 'idle' }
