@@ -434,19 +434,53 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
 }
 
 /**
+ * The same figures with different card totals, and the deposit worked out
+ * again. The deposit is what the showroom hands over, so it can never be left
+ * standing against card figures that have since changed.
+ */
+function withCards(figures: DailyFigures, cards: CardTotals): DailyFigures {
+  return {
+    ...figures,
+    cards,
+    cashDeposit: round2(
+      figures.totalSales - cards.mada - cards.visa - cards.mastercard - figures.offDrawerSales,
+    ),
+  }
+}
+
+/**
+ * Card figures the operator typed in, in place of the ones read off the
+ * receipt.
+ *
+ * Thermal print fades, and a slip photographed at the end of a long day does
+ * not always give its figures up — a section whose heading is legible and whose
+ * total is not leaves a real amount uncounted. Reading harder is not the answer
+ * there: the person is holding the paper. So they can put the figure in, and
+ * the app says which figures came from a person rather than from the receipt
+ * instead of quietly presenting the two as the same thing.
+ */
+export function applyManualCards(
+  figures: DailyFigures,
+  entered: Partial<Record<keyof CardTotals, number>>,
+): DailyFigures {
+  return withCards(figures, {
+    mada: entered.mada ?? figures.cards.mada,
+    visa: entered.visa ?? figures.cards.visa,
+    mastercard: entered.mastercard ?? figures.cards.mastercard,
+  })
+}
+
+/**
  * Moves the Visa figure into the MasterCard column, for the receipts where the
  * terminal printed a MasterCard settlement under a `visa` heading. The two look
  * identical on paper, so this is applied only when the operator says so.
  */
 export function reassignVisaToMastercard(figures: DailyFigures): DailyFigures {
-  return {
-    ...figures,
-    cards: {
-      mada: figures.cards.mada,
-      visa: 0,
-      mastercard: round2(figures.cards.mastercard + figures.cards.visa),
-    },
-  }
+  return withCards(figures, {
+    mada: figures.cards.mada,
+    visa: 0,
+    mastercard: round2(figures.cards.mastercard + figures.cards.visa),
+  })
 }
 
 export class TemplateFillError extends Error {
