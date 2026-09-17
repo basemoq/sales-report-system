@@ -182,6 +182,39 @@ function parseReceipt(items: PdfTextItem[]): SourceKind | null {
 }
 
 /**
+ * What each file already turned out to be, by its content hash.
+ *
+ * A report is rebuilt from the whole day's files every time one is added, and
+ * reading a photograph takes seconds — long enough that re-reading the receipt
+ * every time a second shot arrives would be the slowest thing the app does. The
+ * answer only depends on the bytes, so it is kept.
+ */
+type Reading = Omit<Recognised, 'file'> | { reason: string }
+
+// Only what was read is kept, never the file it was read from: the same bytes
+// can be uploaded again under another name, and the name must be this upload's.
+const readings = new Map<string, Reading>()
+
+/** A day's uploads, and no more: this is a cache, not a store. */
+const READINGS_LIMIT = 24
+
+function remember(hash: string, reading: Reading): Reading {
+  readings.set(hash, reading)
+  for (const key of readings.keys()) {
+    if (readings.size <= READINGS_LIMIT) break
+    readings.delete(key)
+  }
+  return reading
+}
+
+const stripFile = (
+  outcome: Recognised | { file: FingerprintedFile; reason: string },
+): Reading => {
+  const { file: _file, ...reading } = outcome
+  return reading as Reading
+}
+
+/**
  * Works out what each upload is from its content rather than its name, since
  * these exports are named by the moment they were generated.
  */
@@ -259,7 +292,14 @@ export async function buildDailyReport(
     throw new NoDataError('كل الملفات المرفوعة سبق إدخالها؛ لا يوجد جديد لمعالجته.')
   }
 
-  const outcomes = await Promise.all(unique.map(recognise))
+  const outcomes = await Promise.all(
+    unique.map(async (file) => {
+      const seen = readings.get(file.hash)
+      const reading =
+        seen ?? remember(file.hash, stripFile(await recognise(file)))
+      return { ...reading, file }
+    }),
+  )
 
   const sources: RecognisedSource[] = []
   const unrecognised: UnrecognisedFile[] = []

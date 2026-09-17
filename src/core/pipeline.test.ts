@@ -104,6 +104,16 @@ describe('buildDailyReport', () => {
     ])
   })
 
+  it('names a re-upload after itself, not after the copy it was read from', async () => {
+    // What a file turned out to be is kept by its content, so adding a second
+    // photograph does not re-read the first. The name is not part of that: the
+    // same bytes can arrive again called something else.
+    await buildDailyReport([await cacoSummary('first-name.xlsx')])
+    const again = await buildDailyReport([await cacoSummary('second-name.xlsx')])
+
+    expect(again.sources.map((source) => source.fileName)).toEqual(['second-name.xlsx'])
+  })
+
   it('fills the BSS rows from the summary export', async () => {
     const report = await buildDailyReport([await cacoSummary()])
 
