@@ -13,6 +13,12 @@ import { Icon } from './Icon'
 interface Props {
   /** The day's rows, when a CACO detailed export has been uploaded. */
   transactions: readonly CacoTransaction[]
+  /**
+   * A code already read off a photograph in this upload. The panel opens on it
+   * rather than asking for the same slip to be held up to the camera again;
+   * scanning another one replaces it.
+   */
+  found?: { code: string; payload: string | null } | null
 }
 
 type State =
@@ -36,8 +42,11 @@ function frameOf(video: HTMLVideoElement): ImageData | null {
   return context.getImageData(0, 0, canvas.width, canvas.height)
 }
 
-export function ScanPanel({ transactions }: Props) {
+export function ScanPanel({ transactions, found = null }: Props) {
   const [state, setState] = useState<State>({ kind: 'idle' })
+  // What the last upload read, so a newly scanned code replaces it and a new
+  // upload replaces that in turn.
+  const [shown, setShown] = useState<string | null>(null)
   const video = useRef<HTMLVideoElement>(null)
   const stream = useRef<MediaStream | null>(null)
   const timer = useRef<number | null>(null)
@@ -53,6 +62,14 @@ export function ScanPanel({ transactions }: Props) {
   // Whatever ends the scan — a code read, the panel closing, a reload — must
   // release the camera.
   useEffect(() => stop, [stop])
+
+  // A code read off an uploaded photograph is shown as though it were scanned.
+  // Adjusted while rendering rather than in an effect, so the panel never shows
+  // the previous upload's code for a frame first.
+  if (found !== null && found.code !== shown) {
+    setShown(found.code)
+    setState({ kind: 'read', code: found.code, payload: found.payload })
+  }
 
   async function start() {
     setState({ kind: 'scanning' })
@@ -138,6 +155,13 @@ export function ScanPanel({ transactions }: Props) {
         امسح باركود الإيصال لقراءة ما فيه: رمز جهاز SurePay يحمل رقم مرجع العملية ووقتها،
         ويفتح إيصال موازنة مدى. تعمل القراءة داخل الجهاز ولا تُرسل الصورة إلى أي خادم.
       </p>
+
+      {found !== null && state.kind === 'read' && state.code === found.code && (
+        <div className="note ok">
+          <Icon name="success" />
+          <p>قُرئ هذا الباركود من الصورة المرفوعة — لا حاجة لتصويره مرة أخرى.</p>
+        </div>
+      )}
 
       <div className="actions">
         {state.kind === 'scanning' ? (

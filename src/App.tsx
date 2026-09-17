@@ -143,6 +143,9 @@ export default function App() {
     }
   }
 
+  // The first code any of the day's photographs carried, if one did.
+  const scannedCode = report?.scannedCodes[0] ?? null
+
   async function fillTemplate() {
     if (report === null || figures === null) return
     try {
@@ -320,10 +323,19 @@ export default function App() {
         )}
       </section>
 
-      {/* A tool rather than a step, so it waits until it is asked for. */}
+      {/*
+        * A tool rather than a step, so it waits until it is asked for — unless
+        * an uploaded photograph already had a code on it, in which case what it
+        * found is on show.
+        */}
       <div className="no-print">
-        <Collapsible title="قراءة باركود الإيصال" icon="scan">
-          <ScanPanel transactions={report?.transactions ?? []} />
+        <Collapsible
+          title="قراءة باركود الإيصال"
+          icon="scan"
+          count={report?.scannedCodes.length || undefined}
+          open={scannedCode !== null}
+        >
+          <ScanPanel transactions={report?.transactions ?? []} found={scannedCode} />
         </Collapsible>
       </div>
 
