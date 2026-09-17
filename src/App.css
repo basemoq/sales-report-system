@@ -1090,19 +1090,6 @@ details[open] > summary .collapsible-arrow {
   padding: 0 0.85rem 0.85rem;
 }
 
-.collapsible.is-warn {
-  border-color: var(--warn, #b7791f);
-  background: var(--warn-soft, rgba(183, 121, 31, 0.12));
-}
-
-.collapsible.is-warn > summary {
-  color: var(--warn, #b7791f);
-}
-
-.collapsible.is-warn .collapsible-count {
-  background: rgba(183, 121, 31, 0.28);
-}
-
 /* ---------- uploading ---------- */
 
 .dropzone-sub {
@@ -1431,4 +1418,97 @@ details[open] > summary .collapsible-arrow {
   height: 1.15rem;
   flex: none;
   margin-inline-end: 0.45rem;
+}
+
+/* ---------- warnings, behind one mark ---------- */
+
+/*
+ * The day's warnings open over the page rather than in it. Laid out down the
+ * page they pushed the figures below the fold and made an ordinary day look
+ * like a wreck; none of them is dropped, they simply wait to be asked for.
+ */
+.warn-mark {
+  position: relative;
+  margin-top: 0.85rem;
+}
+
+.warn-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.8rem 0.3rem 0.55rem;
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.warn-button:hover:not(:disabled),
+.warn-button.is-open {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--surface);
+}
+
+.warn-button .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+
+.warn-count {
+  min-width: 1.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgb(from currentColor r g b / 18%);
+  font-variant-numeric: tabular-nums;
+}
+
+.warn-bubble {
+  position: absolute;
+  z-index: 5;
+  inset-inline-start: 0;
+  top: calc(100% + 0.5rem);
+  width: min(26rem, calc(100vw - 3rem));
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: 0.5rem 0.25rem;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(16 32 56 / 18%);
+}
+
+/* The little arrow that ties the bubble to the mark it came from. */
+.warn-bubble::before {
+  content: '';
+  position: absolute;
+  top: -0.4rem;
+  inset-inline-start: 1.1rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-inline-start: 1px solid var(--warn);
+  border-block-start: 1px solid var(--warn);
+  background: var(--surface);
+  transform: rotate(45deg);
+}
+
+.warn-bubble ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.warn-bubble li {
+  padding: 0.55rem 0.75rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.75;
+}
+
+.warn-bubble li + li {
+  border-top: 1px solid var(--line);
 }

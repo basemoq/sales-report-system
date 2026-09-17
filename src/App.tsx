@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   applyManualCards,
   fillDailyTemplate,
@@ -75,6 +75,23 @@ export default function App() {
   >({})
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [savedCount, setSavedCount] = useState(0)
+
+  /**
+   * The header names are asked for once the files are read, not before.
+   *
+   * Nobody fills a form in to say who they are and then goes looking for the
+   * files; the day's work starts with the files. So the page is left alone
+   * until they are read, and then it goes back up to the two boxes that are
+   * still empty rather than letting the report be written without them.
+   */
+  const identityBox = useRef<HTMLDivElement>(null)
+  const pressing =
+    report !== null && (identity.showroom.trim() === '' || identity.supervisor.trim() === '')
+
+  useEffect(() => {
+    if (!pressing) return
+    identityBox.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [pressing])
 
   function onBuilt(built: DailyReportBuild) {
     setReport(built)
@@ -178,12 +195,15 @@ export default function App() {
         checked={report !== null && figures !== null}
       />
 
-      <IdentityPanel
-        identity={identity}
-        onChange={setIdentity}
-        showrooms={SHOWROOMS}
-        supervisors={SUPERVISORS}
-      />
+      <div ref={identityBox}>
+        <IdentityPanel
+          identity={identity}
+          onChange={setIdentity}
+          showrooms={SHOWROOMS}
+          supervisors={SUPERVISORS}
+          pressing={pressing}
+        />
+      </div>
 
       <UploadPanel onBuilt={onBuilt} transactions={report?.transactions ?? []} />
 

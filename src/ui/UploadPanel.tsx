@@ -8,8 +8,8 @@ import {
 import { readCodeFromImage } from '../core/scan'
 import type { CacoTransaction } from '../core/sources/caco'
 import { getIngestedHashes } from '../db/store'
-import { Collapsible } from './Collapsible'
 import { ReceiptCode } from './ReceiptCode'
+import { WarningsBubble } from './WarningsBubble'
 import { Icon, type IconName } from './Icon'
 
 /**
@@ -243,26 +243,6 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
         </p>
       )}
 
-      {/*
-        * The camera, spelled out. An iPhone offers it from the picker above on
-        * its own; Chrome does not, and `capture` is what asks for it by name on
-        * both. A shot joins the day's files and the report is rebuilt, so
-        * several pages of one receipt are taken one after another and read
-        * together.
-        */}
-      <div className="upload-actions">
-        <label className="link-file">
-          التقاط صورة بالكاميرا
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            onChange={onPick}
-          />
-        </label>
-      </div>
-
       {queued.length > 0 && (
         <div className="panel-card">
           <h3>
@@ -375,42 +355,16 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
       )}
 
       {outcome.missing.length > 0 && (
-        <div className="note info">
-          <Icon name="info" />
-          <p>
-            لم تُرفع: {outcome.missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.
-          </p>
-        </div>
+        <p className="muted hint">
+          لم تُرفع: {outcome.missing.join('، ')} — تُحتسب صفرًا، والتقرير يكتمل بدونها.
+        </p>
       )}
 
       {/* What the photograph's own code turned out to be, if it carried one. */}
       <ReceiptCode found={code} transactions={transactions} />
 
-      {/* Every warning the build produced, word for word, none dropped. */}
-      {outcome.warnings.length > 0 && (
-        <Collapsible
-          title={
-            outcome.warnings.length === 1
-              ? 'تنبيه يحتاج مراجعتك'
-              : outcome.warnings.length === 2
-                ? 'تنبيهان يحتاجان مراجعتك'
-                : 'تنبيهات تحتاج مراجعتك'
-          }
-          icon="warning"
-          count={outcome.warnings.length}
-          tone="warn"
-          open
-        >
-          <ul className="issues">
-            {outcome.warnings.map((warning, index) => (
-              <li key={index} className="warning">
-                <Icon name="warning" />
-                <span>{warning}</span>
-              </li>
-            ))}
-          </ul>
-        </Collapsible>
-      )}
+      {/* Every warning the build produced, word for word, behind one mark. */}
+      <WarningsBubble warnings={outcome.warnings} />
     </section>
   )
 }

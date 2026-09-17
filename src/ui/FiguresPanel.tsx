@@ -214,7 +214,7 @@ export function FiguresPanel({
           <div className="receipt-strip">
             {photos.map((photo) => (
               <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer">
-                <img src={photo.url} alt={photo.name} loading="lazy" />
+                <img src={photo.url} alt={photo.name} />
               </a>
             ))}
           </div>
