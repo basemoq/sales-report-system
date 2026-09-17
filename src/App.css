@@ -774,3 +774,39 @@ input[type='text']:focus {
     break-inside: avoid;
   }
 }
+
+/* ---------- upload queue ---------- */
+
+/* Files wait here until the operator says to read them, so several camera
+   shots of one receipt go in together. */
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.queue {
+  margin-top: 0.85rem;
+}
+
+.queue .issues li {
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.queue .issues li span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.queue-remove {
+  min-height: 2rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

@@ -37,13 +37,21 @@ function loadPdfjs(): Promise<PdfjsModule> {
 }
 
 /**
+ * pdf.js hands the bytes to its worker and leaves the buffer detached, so the
+ * upload cannot be read twice — and it is read twice whenever a PDF turns out
+ * to be a scan and has to be drawn after its text came back empty. Each read
+ * gets its own copy.
+ */
+const copyOf = (bytes: ArrayBuffer): Uint8Array => new Uint8Array(bytes.slice(0))
+
+/**
  * Extracts every text run with the position it was drawn at. These reports lay
  * their figures out by coordinate rather than in reading order, so a value can
  * only be tied to its label by looking at where each sits on the page.
  */
 export async function extractPdfText(bytes: ArrayBuffer): Promise<PdfTextItem[]> {
   const { getDocument } = await loadPdfjs()
-  const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true })
+  const task = getDocument({ data: copyOf(bytes), useSystemFonts: true })
   const doc = await task.promise
 
   try {
@@ -112,4 +120,55 @@ export function valueRightOf(
     .sort((a, b) => a.x - b.x)
 
   return candidates[0] ?? null
+}
+
+/**
+ * Renders each page to a bitmap, for a PDF that carries no text of its own.
+ *
+ * A receipt that was scanned rather than exported is one image per page with no
+ * text layer at all — `extractPdfText` comes back empty on it — so the only way
+ * in is to draw the page and read what is drawn. Pages are rendered wide enough
+ * for OCR to resolve a receipt's small print, and no wider, since every extra
+ * pixel is time on a phone.
+ */
+const OCR_RENDER_WIDTH = 2000
+
+export async function renderPdfPages(
+  bytes: ArrayBuffer,
+  targetWidth = OCR_RENDER_WIDTH,
+): Promise<{ canvas: OffscreenCanvas; width: number; height: number; page: number }[]> {
+  const { getDocument } = await loadPdfjs()
+  const task = getDocument({ data: copyOf(bytes), useSystemFonts: true })
+  const doc = await task.promise
+
+  try {
+    const pages = []
+    for (let page = 1; page <= doc.numPages; page += 1) {
+      const rendered = await doc.getPage(page)
+      const unscaled = rendered.getViewport({ scale: 1 })
+      const viewport = rendered.getViewport({ scale: targetWidth / unscaled.width })
+
+      const canvas = new OffscreenCanvas(
+        Math.round(viewport.width),
+        Math.round(viewport.height),
+      )
+      const context = canvas.getContext('2d')
+      if (context === null) throw new Error('تعذّر تجهيز الصفحة للقراءة.')
+
+      // A scan is black on transparent; without a white ground it reads as a
+      // black page.
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+
+      await rendered.render({
+        canvasContext: context as unknown as CanvasRenderingContext2D,
+        viewport,
+      }).promise
+
+      pages.push({ canvas, width: canvas.width, height: canvas.height, page })
+    }
+    return pages
+  } finally {
+    await task.destroy()
+  }
 }
