@@ -1,6 +1,7 @@
 import {
   buildDailyFigures,
   exclusionReport,
+  matchRefunds,
   refundSummary,
   unrefundedSuperseded,
   type DailyFigures,
@@ -535,10 +536,34 @@ function joinScannedReceipt(
   return joined
 }
 
-/** The day's rows less the cancelled orders the figures excluded. */
+/**
+ * The day's rows as the employee breakdown counts them.
+ *
+ * Two kinds of row come out. A cancelled order no refund reverses is gone from
+ * the figures, so it is gone from here too — the two halves of one report
+ * cannot disagree about what the day sold.
+ *
+ * A reversed sale and the refund that reversed it both go as a pair. Left in,
+ * they sit on different people: the sale on whoever made it, the refund on
+ * whoever processed it, which for a cancelled order is usually not a salesperson
+ * at all but a central operations login. The day's total is right either way —
+ * the two cancel — but the breakdown credits a seller with a sale that was
+ * undone and shows an operations account as an employee in the red. Dropping
+ * the pair takes the sale off the person who made it, which is where it belongs.
+ *
+ * A refund whose original was not found stays where it is. Nothing says whose
+ * sale it reversed, and that is already reported as needing a person.
+ */
 function countedForEmployees(detailed?: CacoDetailed): CacoTransaction[] {
   if (detailed === undefined) return []
-  const dropped = new Set(unrefundedSuperseded(detailed))
+
+  const dropped = new Set<CacoTransaction>(unrefundedSuperseded(detailed))
+  for (const { refund, reversed } of matchRefunds(detailed)) {
+    if (reversed === null) continue
+    dropped.add(refund)
+    dropped.add(reversed)
+  }
+
   return detailed.transactions.filter((transaction) => !dropped.has(transaction))
 }
 
