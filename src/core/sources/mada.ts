@@ -29,6 +29,13 @@ export interface MadaReconciliation {
   cards: CardTotals
   /** Schemes with money on them that no template column covers. */
   unmapped: SchemeTotals[]
+  /**
+   * Sections where the receipt's own two printings of the same figure do not
+   * agree. On an exported receipt this never happens; on a scanned one it means
+   * OCR misread a digit, and the figure needs a person's eyes before it is
+   * reported as money.
+   */
+  disagreements: { scheme: string; totals: number; debit: number }[]
   /** True when the receipt itself reported the totals as matched. */
   totalsMatched: boolean
   /**
@@ -41,9 +48,16 @@ export interface MadaReconciliation {
   visaMayBeMastercard: boolean
 }
 
-/** Card schemes a mada terminal settles, as printed at the section head. */
+/**
+ * Card schemes a mada terminal settles, as printed at the section head.
+ *
+ * `SPAN` is here because that is what the domestic section is headed on the
+ * receipts that name the network rather than the brand — الشبكة السعودية, with
+ * `mada HOST` as its subsection and `THANK YOU FOR USING mada` at the foot.
+ */
 const SCHEME_LABELS = [
   'mada',
+  'SPAN',
   'visa',
   'mc',
   'mastercard',
@@ -56,6 +70,13 @@ const SCHEME_LABELS = [
 const SCHEME_KEYS = new Set(SCHEME_LABELS.map(labelKey))
 
 const TOTALS = labelKey('TOTALS')
+/**
+ * The debit line above the section's own total. With nothing credited back it
+ * is the same figure, printed a second time — which is what makes a misread
+ * digit on a scanned receipt catchable.
+ */
+const TOTAL_DEBIT = labelKey('TOTAL DB')
+const TOTAL_CREDIT = labelKey('TOTAL CR')
 const NO_TRANSACTIONS = labelKey('<NO TRANSACTIONS>')
 const RECONCILIATION = labelKey('Reconciliation')
 const TOTALS_MATCHED = labelKey('TotalsMatched')
@@ -110,8 +131,11 @@ export function parseMadaReconciliation(
   const leftMargin = Math.min(...ordered.map((item) => item.x))
 
   const schemes: SchemeTotals[] = []
+  const disagreements: MadaReconciliation['disagreements'] = []
   let current: SchemeTotals | null = null
   let captured = false
+  let debit: number | null = null
+  let credit = 0
 
   for (const item of ordered) {
     const key = labelKey(item.text)
@@ -120,6 +144,8 @@ export function parseMadaReconciliation(
     if (atMargin && SCHEME_KEYS.has(key) && !SUBSECTION_KEYS.has(key)) {
       current = { scheme: item.text.trim(), count: 0, amount: 0 }
       captured = false
+      debit = null
+      credit = 0
       schemes.push(current)
       continue
     }
@@ -131,12 +157,34 @@ export function parseMadaReconciliation(
       continue
     }
 
+    if (key === TOTAL_DEBIT) {
+      const [, amount] = numbersOnBaseline(ordered, item)
+      debit = amount ?? null
+      continue
+    }
+
+    if (key === TOTAL_CREDIT) {
+      const [, amount] = numbersOnBaseline(ordered, item)
+      credit = amount ?? 0
+      continue
+    }
+
     if (key === TOTALS) {
       const [count, amount] = numbersOnBaseline(ordered, item)
       current.count = count ?? 0
       // A row printing only one figure is the amount, not a count.
       current.amount = amount ?? count ?? 0
       captured = true
+
+      // Debit less credit is the section total, printed twice. A gap between
+      // them is a misread digit, not an accounting difference.
+      if (debit !== null && Math.abs(debit - credit - current.amount) > 0.005) {
+        disagreements.push({
+          scheme: current.scheme,
+          totals: current.amount,
+          debit: debit - credit,
+        })
+      }
     }
   }
 
@@ -145,7 +193,7 @@ export function parseMadaReconciliation(
 
   for (const scheme of schemes) {
     const key = labelKey(scheme.scheme)
-    if (key === 'mada') cards.mada += scheme.amount
+    if (key === 'mada' || key === 'span') cards.mada += scheme.amount
     else if (key === 'mc' || key === 'mastercard') cards.mastercard += scheme.amount
     else if (key !== 'visa' && scheme.amount !== 0) unmapped.push(scheme)
   }
@@ -170,6 +218,7 @@ export function parseMadaReconciliation(
     schemes,
     cards,
     unmapped,
+    disagreements,
     totalsMatched: ordered.some((item) => labelKey(item.text) === TOTALS_MATCHED),
     // Only the first slot settled: it could be either card, and nothing on the
     // receipt says which.

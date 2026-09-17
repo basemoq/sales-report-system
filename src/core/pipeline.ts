@@ -1,10 +1,17 @@
-import { buildDailyFigures, refundSummary, type DailyFigures } from './dailyReport'
+import {
+  buildDailyFigures,
+  exclusionReport,
+  refundSummary,
+  unrefundedSuperseded,
+  type DailyFigures,
+} from './dailyReport'
 import { periodKey, toISODate } from './dates'
 import { deduplicateByHash, type DuplicateHit } from './dedupe'
 import { summarizeEmployees } from './employees'
 import { sha256Hex } from './hash'
 import type { EmployeeSummary } from './model'
-import { extractPdfText, type PdfTextItem } from './pdf'
+import { canvasOf, readImageText } from './ocr'
+import { extractPdfText, renderPdfPages, type PdfTextItem } from './pdf'
 import {
   checkDetailedTotal,
   isCacoDetailed,
@@ -60,6 +67,8 @@ export interface DailyReportBuild {
   visaMayBeMastercard: boolean
   /** Refund total taken off the figures, for showing beside them. */
   refundDeducted: number
+  /** Cancelled (Superseded) orders taken off the figures, for showing beside them. */
+  supersededExcluded: number
   figures: DailyFigures
   employees: EmployeeSummary[]
   /** The day's rows, for looking a receipt up by its barcode. */
@@ -93,11 +102,83 @@ const isPdf = (bytes: ArrayBuffer) => {
   return head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46
 }
 
+/**
+ * Photographs and scans, by their own first bytes rather than by extension: a
+ * receipt arrives from the camera roll named whatever the phone called it.
+ * HEIC is here because that is what an iPhone stores a photo as.
+ */
+const IMAGE_MAGIC: { name: string; bytes: number[]; offset?: number }[] = [
+  { name: 'png', bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { name: 'jpeg', bytes: [0xff, 0xd8, 0xff] },
+  { name: 'gif', bytes: [0x47, 0x49, 0x46, 0x38] },
+  { name: 'bmp', bytes: [0x42, 0x4d] },
+  { name: 'webp', bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 },
+  { name: 'heif', bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 },
+]
+
+const isImage = (bytes: ArrayBuffer): boolean => {
+  const head = new Uint8Array(bytes.slice(0, 16))
+  return IMAGE_MAGIC.some(({ bytes: magic, offset = 0 }) =>
+    magic.every((byte, index) => head[offset + index] === byte),
+  )
+}
+
 interface Recognised {
   file: FingerprintedFile
   kind: SourceKind
   sheets?: SheetData[]
   items?: PdfTextItem[]
+  /**
+   * The text was read off a picture rather than out of the file. OCR misreads
+   * digits, and these are amounts, so the operator is told to check them.
+   */
+  scanned?: boolean
+}
+
+/**
+ * The text on a photographed or scanned receipt, laid out as a PDF's would be.
+ * A scanned PDF is drawn page by page first; a photo is read as it is.
+ */
+async function readScannedText(file: FingerprintedFile): Promise<PdfTextItem[]> {
+  if (isPdf(file.bytes)) {
+    const pages = await renderPdfPages(file.bytes)
+    const items: PdfTextItem[] = []
+    for (const rendered of pages) {
+      items.push(
+        ...(await readImageText({
+          source: rendered.canvas,
+          width: rendered.width,
+          height: rendered.height,
+          page: rendered.page,
+        })),
+      )
+    }
+    return items
+  }
+
+  const bitmap = await createImageBitmap(new Blob([file.bytes]))
+  try {
+    return await readImageText(canvasOf(bitmap))
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** The PDF and receipt parsers, each rejecting what is not its own report. */
+function parseReceipt(items: PdfTextItem[]): SourceKind | null {
+  try {
+    parseTabsReport(items)
+    return 'tabs'
+  } catch {
+    /* not a TABS export */
+  }
+  try {
+    parseMadaReconciliation(items)
+    return 'mada'
+  } catch {
+    /* not a mada receipt */
+  }
+  return null
 }
 
 /**
@@ -107,31 +188,41 @@ interface Recognised {
 async function recognise(
   file: FingerprintedFile,
 ): Promise<Recognised | { file: FingerprintedFile; reason: string }> {
-  if (isPdf(file.bytes)) {
-    let items: PdfTextItem[]
-    try {
-      items = await extractPdfText(file.bytes)
-    } catch (cause) {
-      // A damaged file must not sink the rest of the batch.
-      return { file, reason: `تعذّرت قراءة ملف PDF: ${(cause as Error).message}` }
+  const picture = isImage(file.bytes)
+
+  if (isPdf(file.bytes) || picture) {
+    let items: PdfTextItem[] = []
+    if (!picture) {
+      try {
+        items = await extractPdfText(file.bytes)
+      } catch (cause) {
+        // A damaged file must not sink the rest of the batch.
+        return { file, reason: `تعذّرت قراءة ملف PDF: ${(cause as Error).message}` }
+      }
+
+      const kind = parseReceipt(items)
+      if (kind !== null) return { file, kind, items }
     }
 
-    // Each PDF parser rejects a file that is not its own report.
+    // Either a photograph, or a PDF that is a picture of a receipt rather than
+    // an export of one — a scan carries no text at all, so there is nothing for
+    // the parsers to read until the page is drawn and looked at.
     try {
-      parseTabsReport(items)
-      return { file, kind: 'tabs', items }
-    } catch {
-      /* not a TABS export */
+      const scanned = await readScannedText(file)
+      const kind = parseReceipt(scanned)
+      if (kind !== null) return { file, kind, items: scanned, scanned: true }
+    } catch (cause) {
+      return {
+        file,
+        reason: `تعذّرت قراءة الإيصال المصوّر: ${(cause as Error).message}`,
+      }
     }
-    try {
-      parseMadaReconciliation(items)
-      return { file, kind: 'mada', items }
-    } catch {
-      /* not a mada receipt */
-    }
+
     return {
       file,
-      reason: 'ملف PDF غير معروف — ليس تقرير TABS ولا إيصال موازنة مدى.',
+      reason: picture
+        ? 'الصورة لا تُقرأ كإيصال موازنة مدى ولا كتقرير TABS — صوّرها كاملة وواضحة وأعد المحاولة.'
+        : 'ملف PDF غير معروف — ليس تقرير TABS ولا إيصال موازنة مدى.',
     }
   }
 
@@ -191,6 +282,14 @@ export async function buildDailyReport(
 
     sources.push({ fileName: outcome.file.fileName, hash: outcome.file.hash, kind: outcome.kind })
 
+    // OCR misreads digits, and these are amounts, so a figure read off a
+    // picture is never presented as if it came out of the export.
+    if (outcome.scanned === true) {
+      warnings.push(
+        `«${outcome.file.fileName}» قُرئ من صورة وليس من ملف — راجع المبالغ قبل الاعتماد.`,
+      )
+    }
+
     switch (outcome.kind) {
       case 'caco-summary':
         caco = parseCacoSummary(outcome.sheets!)
@@ -208,7 +307,15 @@ export async function buildDailyReport(
   }
 
   if (caco === undefined && detailed === undefined && tabs === undefined && mada === undefined) {
-    throw new NoDataError('لم يُتعرَّف على أي ملف من الملفات المرفوعة.')
+    // Why each file was turned away goes with the message: without it the
+    // operator is told only that nothing worked, which is the one thing they
+    // already know.
+    throw new NoDataError(
+      [
+        'لم يُتعرَّف على أي ملف من الملفات المرفوعة.',
+        ...unrecognised.map((file) => `«${file.fileName}»: ${file.reason}`),
+      ].join('\n'),
+    )
   }
 
   // The BSS rows come from the summary, or from the detailed export when only
@@ -226,6 +333,19 @@ export async function buildDailyReport(
   // could not be placed is a warning, since it is still in them.
   const refunds = refundSummary({ caco, detailed })
   warnings.push(...refunds.unplaced)
+
+  // Cancelled orders, unmapped summary rows and money that never reaches the
+  // drawer: each one moves a figure, so each one is said out loud.
+  const exclusions = exclusionReport({ caco, detailed })
+  warnings.push(...exclusions.warnings)
+
+  // The receipt printed one figure two ways and they did not agree: on a
+  // scanned receipt that is a misread digit, and it is money.
+  for (const gap of mada?.disagreements ?? []) {
+    warnings.push(
+      `إيصال مدى: قسم «${gap.scheme}» طُبع بمبلغين مختلفين — ${gap.totals.toFixed(2)} في سطر TOTALS و ${gap.debit.toFixed(2)} في سطر TOTAL DB. راجع الإيصال وصحّح الرقم يدويًا.`,
+    )
+  }
 
   if (mada?.totalsMatched === false) {
     warnings.push('إيصال مدى لا يُظهر تطابق المجاميع (TotalsMatched).')
@@ -252,8 +372,11 @@ export async function buildDailyReport(
     shopId,
     visaMayBeMastercard: mada?.visaMayBeMastercard ?? false,
     refundDeducted: refunds.deducted,
+    supersededExcluded: exclusions.supersededExcluded,
     figures,
-    employees: summarizeEmployees(detailed?.transactions ?? []),
+    // The same rows the figures left out are left out here, so the two halves
+    // of one report cannot disagree about what the day sold.
+    employees: summarizeEmployees(countedForEmployees(detailed)),
     transactions: detailed?.transactions ?? [],
     sources,
     unrecognised,
@@ -261,6 +384,13 @@ export async function buildDailyReport(
     missingSources,
     warnings,
   }
+}
+
+/** The day's rows less the cancelled orders the figures excluded. */
+function countedForEmployees(detailed?: CacoDetailed): CacoTransaction[] {
+  if (detailed === undefined) return []
+  const dropped = new Set(unrefundedSuperseded(detailed))
+  return detailed.transactions.filter((transaction) => !dropped.has(transaction))
 }
 
 /**

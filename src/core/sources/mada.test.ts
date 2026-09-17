@@ -204,3 +204,31 @@ describe('parseMadaReconciliation', () => {
     )
   })
 })
+
+describe('a receipt read off a scan', () => {
+  it('reads the domestic section when it is headed SPAN rather than mada', () => {
+    // الشبكة السعودية: the network's own name, printed instead of the brand,
+    // with `mada HOST` as its subsection.
+    const report = parseMadaReconciliation([...head(), ...scheme(629, 'SPAN', 16, '3987.81')])
+
+    expect(report.cards.mada).toBe(3987.81)
+  })
+
+  it('reports the section whose two printings of one figure disagree', () => {
+    // A misread digit: the debit line and the total line cannot differ when
+    // nothing was credited back.
+    const items = [
+      ...head(),
+      ...scheme(629, 'SPAN', 16, '3987.31'),
+      // The debit line sits between the scheme head and its total.
+      at(560, 'TOTAL DB'),
+      at(560, '16', 308),
+      at(560, '3987.81', 386),
+    ]
+
+    const report = parseMadaReconciliation(items)
+    expect(report.disagreements).toEqual([
+      { scheme: 'SPAN', totals: 3987.31, debit: 3987.81 },
+    ])
+  })
+})

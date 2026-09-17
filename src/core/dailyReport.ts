@@ -17,6 +17,12 @@ export interface DailyFigures {
   cards: CardTotals
   /** The six system figures added up, mirroring the template's own SUM. */
   totalSales: number
+  /**
+   * Sales taken on a payment method that reaches neither the drawer nor the
+   * mada terminal — a bank transfer or a payment link. They are real sales, so
+   * they stay in `totalSales`, but the deposit must not carry them.
+   */
+  offDrawerSales: number
   /** What the template derives: everything not settled on a card. */
   cashDeposit: number
 }
@@ -50,6 +56,71 @@ function bssFromCaco(caco: CacoSummary): BssTotals {
 }
 
 /**
+ * Where a payment method's money ends up.
+ *
+ * `drawer` is counted in the cash deposit. `terminal` is settled on the card
+ * machine, so the mada receipt already accounts for it. Anything else — a bank
+ * transfer, a payment link — reaches neither, and leaving it in the deposit
+ * overstates what the showroom actually hands over.
+ */
+type MethodSettlement = 'drawer' | 'terminal' | 'off-drawer'
+
+const DRAWER_METHODS = new Set(['cash'].map(matchKey))
+const TERMINAL_METHODS = new Set(
+  ['SPAN Offline', 'SPAN', 'Mada', 'Card', 'POS'].map(matchKey),
+)
+
+export function settlementOf(method: string): MethodSettlement {
+  const key = matchKey(method.trim())
+  if (DRAWER_METHODS.has(key)) return 'drawer'
+  if (TERMINAL_METHODS.has(key)) return 'terminal'
+  return 'off-drawer'
+}
+
+/**
+ * Order types the summary carries that fill no template row. `Refund` and
+ * `EVD Voucher` are known to have none; anything else with money on it is a row
+ * this app would drop silently, which is worth saying out loud.
+ */
+const SUMMARY_ROWS_WITHOUT_A_BSS_ROW = new Set([matchKey('Refund'), matchKey('EVD Voucher')])
+
+export function unmappedSummaryRows(caco: CacoSummary): string[] {
+  const mapped = new Set(Object.values(BSS_FROM_CACO).map(matchKey))
+  return caco.rows
+    .filter(
+      (row) =>
+        !mapped.has(matchKey(row.orderType)) &&
+        !SUMMARY_ROWS_WITHOUT_A_BSS_ROW.has(matchKey(row.orderType)) &&
+        Math.abs(row.total) > 0.005,
+    )
+    .map(
+      (row) =>
+        `تقرير CACO المختصر يحتوي على نوع عملية «${row.orderType}» بمبلغ ${row.total.toFixed(2)} لا يقابله صف في القالب، فلم يُحتسب — راجعه يدويًا.`,
+    )
+}
+
+/** Sales on methods that reach neither the drawer nor the terminal, per method. */
+export function offDrawerByMethod(sources: DailySources): Record<string, number> {
+  const totals: Record<string, number> = {}
+
+  if (sources.caco) {
+    for (const method of sources.caco.paymentMethods) {
+      if (settlementOf(method) !== 'off-drawer') continue
+      const amount = sources.caco.rows.reduce((sum, row) => sum + (row.byMethod[method] ?? 0), 0)
+      if (Math.abs(amount) > 0.005) totals[method] = round2(amount)
+    }
+    return totals
+  }
+
+  for (const transaction of countedTransactions(sources.detailed)) {
+    if (settlementOf(transaction.paymentMethod) !== 'off-drawer') continue
+    totals[transaction.paymentMethod] =
+      round2((totals[transaction.paymentMethod] ?? 0) + transaction.amount)
+  }
+  return totals
+}
+
+/**
  * Order types the detailed export names outright in its description column.
  * A sales order is described by what was sold instead, so every other
  * description is one — which is what makes the split derivable at all.
@@ -63,6 +134,15 @@ const NAMED_ORDER_TYPES = new Map<string, keyof BssTotals | null>([
 ])
 
 const REFUND = matchKey('Refund')
+const SUPERSEDED = matchKey('Superseded')
+
+/**
+ * A sales order the BSS replaced rather than completed. The row stays in the
+ * export at its full amount, so it is in both CACO totals whether or not the
+ * customer ever paid it.
+ */
+const isSuperseded = (transaction: CacoTransaction): boolean =>
+  matchKey((transaction.status ?? '').trim()) === SUPERSEDED
 
 /** Which template row a transaction belongs to; null for a row with none. */
 function bucketOf(transaction: CacoTransaction): keyof BssTotals | null {
@@ -112,6 +192,53 @@ export function matchRefunds(detailed: CacoDetailed): RefundMatch[] {
 }
 
 /**
+ * Superseded sales orders that no refund reverses.
+ *
+ * A cancelled order is settled one of two ways. Either a `Refund` row carries
+ * the money back out — `matchRefunds` finds those and they net off — or the
+ * order is simply re-rung, leaving the superseded row behind with no
+ * counterweight. Observed on a real day: an iPhone rung at 9:33 PM went
+ * `Superseded`, the same amount was rung again for the same line at 9:37 PM and
+ * processed, and both rows sit in the export. Counting both bills the customer
+ * twice, and CACO's own total does exactly that — the summary's
+ * `Sales Order Payment` row carries the amount twice too, so neither export
+ * catches it.
+ *
+ * So these rows come out of the figures, and each one is named in a warning
+ * with its amount and sales order number: the money is large enough that a
+ * person should see it rather than find the figures quietly moved.
+ */
+export function unrefundedSuperseded(detailed: CacoDetailed): CacoTransaction[] {
+  const reversed = new Set(
+    matchRefunds(detailed)
+      .map((match) => match.reversed)
+      .filter((sale): sale is CacoTransaction => sale !== null),
+  )
+
+  return detailed.transactions.filter(
+    (transaction) => isSuperseded(transaction) && !reversed.has(transaction),
+  )
+}
+
+/** Takes each unreversed superseded order off the row it was counted in. */
+function applySuperseded(totals: BssTotals, detailed: CacoDetailed): BssTotals {
+  for (const transaction of unrefundedSuperseded(detailed)) {
+    const bucket = bucketOf(transaction)
+    if (bucket !== null) totals[bucket] -= transaction.amount
+  }
+  return totals
+}
+
+/** The transactions that count towards the day, after both exclusions. */
+function countedTransactions(detailed?: CacoDetailed): CacoTransaction[] {
+  if (detailed === undefined) return []
+  const dropped = new Set(unrefundedSuperseded(detailed))
+  return detailed.transactions.filter(
+    (transaction) => !dropped.has(transaction) && !isRefund(transaction),
+  )
+}
+
+/**
  * Takes each matched refund off the row its original sale was counted in. A
  * refund whose original is not in the day is left alone and reported instead:
  * which row it belongs to cannot be known, and guessing moves real money.
@@ -134,9 +261,9 @@ function applyRefunds(totals: BssTotals, detailed: CacoDetailed): BssTotals {
 function bssFromDetailed(detailed: CacoDetailed): BssTotals {
   const totals: BssTotals = { billPayment: 0, ordering: 0, cashSales: 0 }
 
-  for (const transaction of detailed.transactions) {
+  for (const transaction of countedTransactions(detailed)) {
     const bucket = bucketOf(transaction)
-    if (bucket === null || isRefund(transaction)) continue
+    if (bucket === null) continue
     totals[bucket] += transaction.amount
   }
 
@@ -204,6 +331,48 @@ export function refundSummary(sources: DailySources): RefundSummary {
 }
 
 /**
+ * Everything this app took out of CACO's own totals, and everything it could
+ * not decide on. The figures move by these amounts, so each one is named.
+ */
+export interface ExclusionReport {
+  /** Superseded orders taken off the figures. */
+  supersededExcluded: number
+  warnings: string[]
+}
+
+export function exclusionReport(sources: DailySources): ExclusionReport {
+  const warnings: string[] = []
+  let supersededExcluded = 0
+
+  if (sources.detailed) {
+    for (const transaction of unrefundedSuperseded(sources.detailed)) {
+      supersededExcluded += transaction.amount
+      const order = transaction.salesOrderNumber ?? transaction.receiptNo ?? '—'
+      const line = transaction.msisdn ?? transaction.account ?? '—'
+      warnings.push(
+        `عملية ملغاة (Superseded) بمبلغ ${transaction.amount.toFixed(2)} على ${line} — أمر البيع ${order}${transaction.time ? ` الساعة ${transaction.time}` : ''} — لم يقابلها مرتجع، فاستُبعدت من المبيعات. راجعها يدويًا.`,
+      )
+    }
+  } else if (sources.caco) {
+    // The summary carries no status column, so a cancelled order is
+    // indistinguishable from a completed one in it.
+    warnings.push(
+      'تقرير CACO المختصر لا يحمل حالة أمر البيع، فلا يمكن كشف العمليات الملغاة (Superseded) منه — ارفع التقرير المفصّل للتأكد.',
+    )
+  }
+
+  if (sources.caco) warnings.push(...unmappedSummaryRows(sources.caco))
+
+  for (const [method, amount] of Object.entries(offDrawerByMethod(sources))) {
+    warnings.push(
+      `مبلغ ${amount.toFixed(2)} على «${method}» لا يدخل الصندوق ولا يظهر في إيصال مدى، فخُصم من الإيداع النقدي وبقي ضمن إجمالي المبيعات.`,
+    )
+  }
+
+  return { supersededExcluded: round2(supersededExcluded), warnings }
+}
+
+/**
  * Money is carried to halalas. Summing raw floats leaves artefacts like
  * 1411.1599999999999, which would be written into the sheet as-is.
  */
@@ -224,7 +393,7 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
   const bss = roundAll(
     sources.caco
       ? sources.detailed
-        ? applyRefunds(bssFromCaco(sources.caco), sources.detailed)
+        ? applySuperseded(applyRefunds(bssFromCaco(sources.caco), sources.detailed), sources.detailed)
         : applySummaryRefunds(bssFromCaco(sources.caco), sources.caco)
       : sources.detailed
         ? bssFromDetailed(sources.detailed)
@@ -241,6 +410,12 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
       bss.cashSales,
   )
 
+  // Real sales, but on money that never reaches the drawer, so the deposit
+  // must not be asked for them.
+  const offDrawerSales = round2(
+    Object.values(offDrawerByMethod(sources)).reduce((sum, amount) => sum + amount, 0),
+  )
+
   return {
     date:
       sources.caco?.parameters.from ??
@@ -251,7 +426,10 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
     bss,
     cards,
     totalSales,
-    cashDeposit: round2(totalSales - cards.mada - cards.visa - cards.mastercard),
+    offDrawerSales,
+    cashDeposit: round2(
+      totalSales - cards.mada - cards.visa - cards.mastercard - offDrawerSales,
+    ),
   }
 }
 

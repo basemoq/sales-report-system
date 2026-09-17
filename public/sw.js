@@ -47,6 +47,9 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Build output is content-hashed, so a cache hit is always the right bytes.
+  // The OCR engine under /ocr/ is the exception: those names are fixed, so they
+  // are held by the pinned dependency version and only replaced when CACHE above
+  // is bumped. Bump it when the OCR engine moves.
   event.respondWith(
     (async () => {
       const cached = await caches.match(request)

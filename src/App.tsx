@@ -160,6 +160,7 @@ export default function App() {
             figures={figures}
             reportDate={report.reportDate}
             refundDeducted={report.refundDeducted}
+            supersededExcluded={report.supersededExcluded}
             visaMayBeMastercard={report.visaMayBeMastercard}
             treatVisaAsMastercard={visaIsMastercard}
             onTreatVisaAsMastercard={setVisaIsMastercard}

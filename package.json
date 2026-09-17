@@ -12,13 +12,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "jsqr": "^1.4.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
