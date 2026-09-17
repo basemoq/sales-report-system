@@ -6,8 +6,10 @@ import {
   type UploadedFile,
 } from '../core/pipeline'
 import { readCodeFromImage } from '../core/scan'
+import type { CacoTransaction } from '../core/sources/caco'
 import { getIngestedHashes } from '../db/store'
 import { Collapsible } from './Collapsible'
+import { ReceiptCode } from './ReceiptCode'
 import { Icon, type IconName } from './Icon'
 
 /**
@@ -30,12 +32,8 @@ function sizeOf(bytes: number): string {
 
 interface Props {
   onBuilt: (report: DailyReportBuild) => void
-  /**
-   * A code found printed on a picked photograph. Reported as soon as it is
-   * read, and apart from the report: a picture of a code is worth reading
-   * whether or not the day has any figures to go with it.
-   */
-  onCode: (found: { code: string; payload: string | null }) => void
+  /** The day's rows, for showing what a code on a photograph points at. */
+  transactions: readonly CacoTransaction[]
 }
 
 const KIND_LABELS: Record<SourceKind, string> = {
@@ -71,7 +69,7 @@ interface Outcome {
 
 const EMPTY: Outcome = { files: [], missing: [], warnings: [] }
 
-export function UploadPanel({ onBuilt, onCode }: Props) {
+export function UploadPanel({ onBuilt, transactions }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome>(EMPTY)
@@ -85,6 +83,12 @@ export function UploadPanel({ onBuilt, onCode }: Props) {
    * last shot and throw the ones before it away.
    */
   const [queued, setQueued] = useState<UploadedFile[]>([])
+  /**
+   * The code the last photograph carried, kept apart from the report: a picture
+   * of a code is worth reading whether or not the day has figures to go with
+   * it, and the build throws when it has none.
+   */
+  const [code, setCode] = useState<{ code: string; payload: string | null } | null>(null)
 
   // The run reads the files from here rather than from state: a shot picked
   // while the previous run is still going must be in the batch that follows,
@@ -167,6 +171,9 @@ export function UploadPanel({ onBuilt, onCode }: Props) {
   function setFiles(next: UploadedFile[]) {
     files.current = next
     setQueued(next)
+    // The code belongs to the pictures that are there; emptying the list takes
+    // it with them.
+    if (next.length === 0) setCode(null)
     void build()
   }
 
@@ -186,7 +193,7 @@ export function UploadPanel({ onBuilt, onCode }: Props) {
     for (const file of added) {
       if (!/\.(png|jpe?g|heic|heif|webp|gif|bmp)$/i.test(file.fileName)) continue
       void readCodeFromImage(file.bytes).then((found) => {
-        if (found !== null) onCode(found)
+        if (found !== null) setCode(found)
       })
     }
   }
@@ -375,6 +382,9 @@ export function UploadPanel({ onBuilt, onCode }: Props) {
           </p>
         </div>
       )}
+
+      {/* What the photograph's own code turned out to be, if it carried one. */}
+      <ReceiptCode found={code} transactions={transactions} />
 
       {/* Every warning the build produced, word for word, none dropped. */}
       {outcome.warnings.length > 0 && (

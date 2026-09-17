@@ -23,7 +23,6 @@ import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
 import { Stepper } from './ui/Stepper'
 import { SummaryStrip } from './ui/SummaryStrip'
-import { ScanPanel } from './ui/ScanPanel'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
 import { reportFileName } from './ui/format'
@@ -74,10 +73,6 @@ export default function App() {
   const [enteredCards, setEnteredCards] = useState<
     Partial<Record<keyof CardTotals, string>>
   >({})
-  /** A code read off a picked photograph, kept apart from the day's figures. */
-  const [scannedCode, setScannedCode] = useState<
-    { code: string; payload: string | null } | null
-  >(null)
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [savedCount, setSavedCount] = useState(0)
 
@@ -190,7 +185,7 @@ export default function App() {
         supervisors={SUPERVISORS}
       />
 
-      <UploadPanel onBuilt={onBuilt} onCode={setScannedCode} />
+      <UploadPanel onBuilt={onBuilt} transactions={report?.transactions ?? []} />
 
       {/* The three figures the day is judged by, before and after the reading. */}
       <SummaryStrip figures={figures} />
@@ -324,22 +319,6 @@ export default function App() {
           </button>
         )}
       </section>
-
-      {/*
-        * A tool rather than a step, so it waits until it is asked for — unless
-        * an uploaded photograph already had a code on it, in which case what it
-        * found is on show.
-        */}
-      <div className="no-print">
-        <Collapsible
-          title="قراءة باركود الإيصال"
-          icon="scan"
-          count={scannedCode === null ? undefined : 1}
-          open={scannedCode !== null}
-        >
-          <ScanPanel transactions={report?.transactions ?? []} found={scannedCode} />
-        </Collapsible>
-      </div>
 
       {/* Kept out of .no-print so it carries onto the employee report PDF. */}
       <footer className="credit">© 2026 basem.alawalgy — جميع الحقوق محفوظة</footer>

@@ -356,24 +356,6 @@ input[type='text']:focus {
   letter-spacing: 0.02em;
 }
 
-/* ---------- barcode scanner ---------- */
-
-.scan-view {
-  display: block;
-  width: 100%;
-  max-width: 24rem;
-  margin-top: 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: #000;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-}
-
-.scan-view.is-hidden {
-  display: none;
-}
-
 /* An anchor that has to read as one of the buttons beside it. */
 .button-link {
   display: inline-flex;
@@ -1441,4 +1423,12 @@ details[open] > summary .collapsible-arrow {
   width: 1.15rem;
   height: 1.15rem;
   flex: none;
+}
+
+/* The barcode card's own button, which is a link to the issuer's page. */
+.button-link .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  margin-inline-end: 0.45rem;
 }
