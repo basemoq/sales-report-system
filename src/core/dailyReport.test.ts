@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import {
   buildDailyFigures,
+  applyManualCards,
   exclusionReport,
   fillDailyTemplate,
   reassignVisaToMastercard,
@@ -29,6 +30,8 @@ const tabs = (
   generatedOn: null,
   sectionsFound: [],
 })
+
+const round2 = (value: number): number => Math.round(value * 100) / 100
 
 const mada = (
   cards = { mada: 1190.2, visa: 590.59, mastercard: 0 },
@@ -559,6 +562,41 @@ describe('refunds against a superseded sale', () => {
     expect(figures.offDrawerSales).toBe(120)
     expect(figures.cashDeposit).toBe(180)
     expect(exclusionReport({ caco: withTransfer }).warnings.join()).toContain('Bank Transfer')
+  })
+
+  it('takes a card figure the operator typed in over the one that was read', () => {
+    // The scan read the section heading but not its total, so the amount is on
+    // the paper in the operator's hand and nowhere in the file.
+    const figures = buildDailyFigures({
+      caco: caco([{ orderType: 'Sales Order Payment', total: 1000 }]),
+      mada: mada({ mada: 1245.9, visa: 0, mastercard: 0 }),
+    })
+    const corrected = applyManualCards(figures, { visa: 40.25 })
+
+    expect(corrected.cards).toEqual({ mada: 1245.9, visa: 40.25, mastercard: 0 })
+    // The deposit is what the showroom hands over, so it follows the change.
+    expect(corrected.cashDeposit).toBe(round2(figures.cashDeposit - 40.25))
+  })
+
+  it('leaves a card figure alone when nothing was typed for it', () => {
+    const figures = buildDailyFigures({
+      caco: caco([{ orderType: 'Sales Order Payment', total: 1000 }]),
+      mada: mada({ mada: 1245.9, visa: 590.59, mastercard: 0 }),
+    })
+
+    // An empty box is not an entry of zero; it is the reading again.
+    expect(applyManualCards(figures, {})).toEqual(figures)
+  })
+
+  it('lets a typed figure be moved into the MasterCard column like any other', () => {
+    const figures = buildDailyFigures({
+      caco: caco([{ orderType: 'Sales Order Payment', total: 1000 }]),
+      mada: mada({ mada: 0, visa: 0, mastercard: 0 }),
+    })
+    const moved = reassignVisaToMastercard(applyManualCards(figures, { visa: 40.25 }))
+
+    expect(moved.cards).toEqual({ mada: 0, visa: 0, mastercard: 40.25 })
+    expect(moved.cashDeposit).toBe(round2(figures.cashDeposit - 40.25))
   })
 
   it('nets it off the summary too, which reports its refunds in a row of their own', () => {

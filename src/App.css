@@ -714,6 +714,10 @@ input[type='text']:focus {
  * lays out the Arabic text correctly, so print the report and nothing else.
  */
 @media print {
+  .print-only {
+    display: inline;
+  }
+
   .no-print {
     display: none !important;
   }
@@ -809,4 +813,60 @@ input[type='text']:focus {
   background: transparent;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* ---------- card figures typed in by hand ---------- */
+
+/* A figure the scan could not read is typed straight into its own cell. */
+.cell-input {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.cell-input:hover {
+  border-color: var(--line-strong);
+}
+
+.cell-input:focus {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+/* Typed in, not read: the report says which is which. */
+.cell-input.is-entered {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  font-weight: 600;
+}
+
+.print-only {
+  display: none;
+}
+
+.receipt-photos {
+  margin-top: 0.85rem;
+}
+
+.receipt-strip {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 0.4rem;
+}
+
+.receipt-strip img {
+  height: 12rem;
+  width: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+  object-fit: contain;
 }

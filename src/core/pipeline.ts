@@ -74,6 +74,12 @@ export interface DailyReportBuild {
   employees: EmployeeSummary[]
   /** The day's rows, for looking a receipt up by its barcode. */
   transactions: CacoTransaction[]
+  /**
+   * The photographs this upload carried, kept so they can be looked at beside
+   * the figures. A figure the scan could not read is typed in by hand, and the
+   * paper is not always still on the counter when that happens.
+   */
+  receiptImages: UploadedFile[]
   sources: RecognisedSource[]
   unrecognised: UnrecognisedFile[]
   duplicates: DuplicateHit<FingerprintedFile>[]
@@ -464,6 +470,9 @@ export async function buildDailyReport(
     // of one report cannot disagree about what the day sold.
     employees: summarizeEmployees(countedForEmployees(detailed)),
     transactions: detailed?.transactions ?? [],
+    receiptImages: unique
+      .filter((file) => isImage(file.bytes))
+      .map((file) => ({ fileName: file.fileName, bytes: file.bytes })),
     sources,
     unrecognised,
     duplicates,

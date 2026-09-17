@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import {
+  applyManualCards,
   fillDailyTemplate,
   reassignVisaToMastercard,
   type ReportIdentity,
 } from './core/dailyReport'
+import type { CardTotals } from './core/sources/mada'
+import { parseNumber } from './core/text'
 import type { DailyReportBuild } from './core/pipeline'
 import { getTemplateBytes } from './core/activeTemplate'
 import type { SavedReportData } from './core/savedReport'
@@ -60,6 +63,14 @@ export default function App() {
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [fill, setFill] = useState<FillState>({ kind: 'idle' })
   const [visaIsMastercard, setVisaIsMastercard] = useState(false)
+  /**
+   * Card figures typed in when the receipt would not give them up, held as
+   * typed: a half-written number is a valid thing to be holding while someone
+   * is still typing it.
+   */
+  const [enteredCards, setEnteredCards] = useState<
+    Partial<Record<keyof CardTotals, string>>
+  >({})
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [savedCount, setSavedCount] = useState(0)
 
@@ -68,16 +79,28 @@ export default function App() {
     setSave({ kind: 'idle' })
     setFill({ kind: 'idle' })
     setVisaIsMastercard(false)
+    setEnteredCards({})
   }
 
   // Everything downstream — the displayed figures, the saved report and the
   // filled template — reads the same corrected figures.
+  // What a person typed stands in for what was read; moving Visa into the
+  // MasterCard column then moves whichever of the two is there.
   const figures =
     report === null
       ? null
-      : visaIsMastercard
-        ? reassignVisaToMastercard(report.figures)
-        : report.figures
+      : (() => {
+          const entered: Partial<Record<keyof CardTotals, number>> = {}
+          for (const [card, text] of Object.entries(enteredCards) as [
+            keyof CardTotals,
+            string,
+          ][]) {
+            const amount = parseNumber(text)
+            if (amount !== null) entered[card] = amount
+          }
+          const corrected = applyManualCards(report.figures, entered)
+          return visaIsMastercard ? reassignVisaToMastercard(corrected) : corrected
+        })()
 
   async function persist(overwrite: boolean) {
     if (report === null || figures === null) return
@@ -163,6 +186,11 @@ export default function App() {
             supersededExcluded={report.supersededExcluded}
             visaMayBeMastercard={report.visaMayBeMastercard}
             treatVisaAsMastercard={visaIsMastercard}
+            enteredCards={enteredCards}
+            onEnterCard={(card, value) =>
+              setEnteredCards((current) => ({ ...current, [card]: value }))
+            }
+            receiptImages={report.receiptImages}
             onTreatVisaAsMastercard={setVisaIsMastercard}
           />
 

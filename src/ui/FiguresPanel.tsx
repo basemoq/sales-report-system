@@ -1,4 +1,7 @@
+import { useEffect, useMemo } from 'react'
 import type { DailyFigures } from '../core/dailyReport'
+import type { UploadedFile } from '../core/pipeline'
+import type { CardTotals } from '../core/sources/mada'
 import { formatMoney } from './format'
 import { Icon } from './Icon'
 
@@ -13,7 +16,43 @@ interface Props {
   visaMayBeMastercard: boolean
   treatVisaAsMastercard: boolean
   onTreatVisaAsMastercard: (value: boolean) => void
+  /**
+   * Card figures the operator typed in, as typed: a half-written number is a
+   * valid thing to be holding while someone is still typing it.
+   */
+  enteredCards: Partial<Record<keyof CardTotals, string>>
+  onEnterCard: (card: keyof CardTotals, value: string) => void
+  /** The day's photographs, to read a figure off when the scan could not. */
+  receiptImages: readonly UploadedFile[]
 }
+
+/**
+ * The photographs as something a browser can show. They are held in memory as
+ * bytes, so each needs a URL of its own, and each URL has to be handed back or
+ * the page keeps the whole receipt alive after it is gone.
+ */
+function useImageUrls(images: readonly UploadedFile[]): { name: string; url: string }[] {
+  const urls = useMemo(
+    () =>
+      images.map((image) => ({
+        name: image.fileName,
+        url: URL.createObjectURL(new Blob([image.bytes])),
+      })),
+    [images],
+  )
+
+  useEffect(() => () => urls.forEach((image) => URL.revokeObjectURL(image.url)), [urls])
+
+  return urls
+}
+
+const CARD_LABELS: Record<keyof CardTotals, string> = {
+  mada: 'شبكة - مدي',
+  visa: 'فيزا',
+  mastercard: 'ماستر كارد',
+}
+
+const CARD_COLUMNS = Object.entries(CARD_LABELS) as [keyof CardTotals, string][]
 
 export function FiguresPanel({
   figures,
@@ -23,7 +62,17 @@ export function FiguresPanel({
   visaMayBeMastercard,
   treatVisaAsMastercard,
   onTreatVisaAsMastercard,
+  enteredCards,
+  onEnterCard,
+  receiptImages,
 }: Props) {
+  const photos = useImageUrls(receiptImages)
+
+  // A box left empty is not an entry of zero; it is the reading again.
+  const entered = new Set(
+    CARD_COLUMNS.map(([card]) => card).filter((card) => (enteredCards[card] ?? '') !== ''),
+  )
+
   const systemRows: [string, string, number][] = [
     ['TABS', 'Total Bill Payment', figures.tabs.billPayment],
     ['TABS', 'Total Ordering', figures.tabs.ordering],
@@ -101,9 +150,24 @@ export function FiguresPanel({
           <tbody>
             <tr>
               <td className="num">{formatMoney(figures.cashDeposit)}</td>
-              <td className="num">{formatMoney(figures.cards.mada)}</td>
-              <td className="num">{formatMoney(figures.cards.visa)}</td>
-              <td className="num">{formatMoney(figures.cards.mastercard)}</td>
+              {CARD_COLUMNS.map(([card, label]) => (
+                <td className="num" key={card}>
+                  {/*
+                    * Typed over when the receipt would not give the figure up.
+                    * Printed as a plain number, since a box to type in means
+                    * nothing on paper.
+                    */}
+                  <input
+                    className={entered.has(card) ? 'cell-input is-entered no-print' : 'cell-input no-print'}
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={label}
+                    value={enteredCards[card] ?? formatMoney(figures.cards[card])}
+                    onChange={(event) => onEnterCard(card, event.target.value)}
+                  />
+                  <span className="print-only">{formatMoney(figures.cards[card])}</span>
+                </td>
+              ))}
             </tr>
           </tbody>
         </table>
@@ -111,6 +175,41 @@ export function FiguresPanel({
       <p className="muted">
         الإيداع النقدي يحسبه القالب نفسه: إجمالى المبيعات ناقص ما حُصِّل بالبطاقات.
       </p>
+
+      {entered.size > 0 ? (
+        <div className="notice no-print">
+          <p className="warn">
+            {[...entered]
+              .map((card) => CARD_LABELS[card])
+              .join('، ')}{' '}
+            — أُدخلت يدويًا ولم تُقرأ من الإيصال. تُحتسب في التقرير وفي القالب كما كتبتها.
+          </p>
+          <button type="button" onClick={() => entered.forEach((card) => onEnterCard(card, ''))}>
+            استرجاع المقروء من الإيصال
+          </button>
+        </div>
+      ) : (
+        <p className="muted no-print">
+          خانات البطاقات قابلة للتعديل: إذا لم يُقرأ مبلغ من الإيصال المصوّر، اكتبه هنا.
+        </p>
+      )}
+
+      {/*
+        * The paper is not always still on the counter when a figure turns out
+        * to be missing, so the photograph stays where the figure is typed.
+        */}
+      {photos.length > 0 && (
+        <div className="receipt-photos no-print">
+          <p className="muted">الإيصالات المصوّرة — اضغط الصورة لتكبيرها وقراءة المبلغ منها:</p>
+          <div className="receipt-strip">
+            {photos.map((photo) => (
+              <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer">
+                <img src={photo.url} alt={photo.name} loading="lazy" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {visaMayBeMastercard && (
         <div className="notice no-print">
