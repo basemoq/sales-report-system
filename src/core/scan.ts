@@ -33,14 +33,17 @@ function loadJsqr() {
 }
 
 /**
- * ZXing, compiled to WebAssembly: the reader that covers the striped codes as
- * well as the square ones.
+ * ZXing, compiled to WebAssembly: the reader that copes with a code as a camera
+ * actually sees one.
  *
- * `BarcodeDetector` reads both but is missing from Safari altogether and from
- * Android phones whose barcode module was never installed, and jsQR only ever
- * reads QR. A receipt prints whichever its till was set up for, so on those
- * phones a striped code could not be read at all — which is what a receipt in
- * hand would have shown.
+ * `BarcodeDetector` is missing from Safari altogether and from Android phones
+ * whose barcode module was never installed, which left jsQR — and jsQR wants a
+ * clean, square, head-on code. Measured on a photograph of a SurePay terminal's
+ * own screen, taken in a showroom: jsQR spent 1.5 seconds and found nothing,
+ * ZXing read it in 0.8. The glare off the glass, the angle, and the moiré
+ * between the screen's pixels and the camera's are enough, and that is the
+ * ordinary way this code is photographed. It also reads the striped codes,
+ * which jsQR never could.
  *
  * ~800KB, fetched the first time a code is actually looked for, and served by
  * this app rather than a CDN for the same reason the OCR engine is.
