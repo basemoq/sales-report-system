@@ -10,7 +10,18 @@ import { Icon } from './Icon'
  * open over the page rather than in it — nothing is dropped, and nothing is
  * pushed down to make room.
  */
-export function WarningsBubble({ warnings }: { warnings: readonly string[] }) {
+export function WarningsBubble({
+  warnings,
+  label: given,
+}: {
+  warnings: readonly string[]
+  /**
+   * What the mark says instead of counting. One explanation standing beside the
+   * control it explains is not a tally of the day's problems, and reading «1
+   * تنبيه» there says less than saying what it is about.
+   */
+  label?: string
+}) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
 
@@ -35,11 +46,12 @@ export function WarningsBubble({ warnings }: { warnings: readonly string[] }) {
   if (warnings.length === 0) return null
 
   const label =
-    warnings.length === 1
+    given ??
+    (warnings.length === 1
       ? 'تنبيه يحتاج مراجعتك'
       : warnings.length === 2
         ? 'تنبيهان يحتاجان مراجعتك'
-        : `${warnings.length} تنبيهات تحتاج مراجعتك`
+        : `${warnings.length} تنبيهات تحتاج مراجعتك`)
 
   return (
     <div className="warn-mark" ref={box}>
@@ -51,7 +63,7 @@ export function WarningsBubble({ warnings }: { warnings: readonly string[] }) {
         onClick={() => setOpen((shown) => !shown)}
       >
         <Icon name="warning" />
-        <span className="warn-count">{warnings.length}</span>
+        {given === undefined && <span className="warn-count">{warnings.length}</span>}
         <span className="warn-label">{label}</span>
       </button>
 

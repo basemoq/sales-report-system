@@ -3,7 +3,13 @@ import { formatDayLabel, formatMoney, reportFileName } from './format'
 
 describe('reportFileName', () => {
   it('names the file after the report and the day it covers', () => {
-    expect(reportFileName('2026-09-13')).toBe('تقرير المبيعات المعارض 2026-09-13.xlsx')
+    expect(reportFileName('2026-09-13')).toBe('sales-report-2026-09-13.xlsx')
+  })
+
+  // Chrome drops a `download` attribute that is not ASCII, and the file then
+  // arrives as «download» with no extension — it will not open on a click.
+  it('stays in characters a browser will keep', () => {
+    expect(reportFileName('2026-09-13')).toMatch(/^[\x20-\x7e]+\.xlsx$/)
   })
 
   it('gives two days two file names, so neither overwrites the other', () => {

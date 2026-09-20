@@ -31,7 +31,12 @@ export function formatDayLabel(isoDate: string): string {
  * a report downloaded from the day's build and the same report downloaded again
  * from the saved list arrive as the same file — and the day is part of it, or a
  * month of reports would pile up as «… (1)», «… (2)» in the downloads folder.
+ *
+ * The name is Latin on purpose. A blob download carries its name in the anchor's
+ * `download` attribute, and Chrome drops an Arabic one entirely: the file
+ * arrived as «download», with no extension, so it would not open on a
+ * double-click. The date keeps it readable and keeps each day apart.
  */
 export function reportFileName(isoDate: string): string {
-  return `تقرير المبيعات المعارض ${isoDate}.xlsx`
+  return `sales-report-${isoDate}.xlsx`
 }

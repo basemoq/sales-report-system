@@ -1539,3 +1539,19 @@ details[open] > summary .collapsible-arrow {
 .warn-bubble li + li {
   border-top: 1px solid var(--line);
 }
+
+/*
+ * An explanation behind a mark, and the choice it explains beside it. The mark
+ * carries its own top margin for when it stands alone under a panel, which
+ * here would push it off the row's centre line.
+ */
+.notice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+}
+
+.notice-row .warn-mark {
+  margin-top: 0;
+}
