@@ -5,6 +5,11 @@ import { Collapsible } from './Collapsible'
 import type { CardTotals } from '../core/sources/mada'
 import { formatMoney } from './format'
 import { Icon } from './Icon'
+import { WarningsBubble } from './WarningsBubble'
+
+/** Why a figure printed under VISA may not be visa money at all. */
+const VISA_IS_MASTERCARD =
+  'إيصال مدى يحمل مبلغًا في قسم «visa» الأول بينما قسم «VISA» في آخر الإيصال يقول «لا يوجد عمليات». هذا هو شكل الخطأ المعروف في الطابعة، حيث يُطبع تحصيل ماستركارد تحت اسم فيزا. الشكلان متطابقان على الورق فلا يمكن التمييز بينهما آليًا.'
 
 interface Props {
   figures: DailyFigures
@@ -228,20 +233,22 @@ export function FiguresPanel({
 
         {visaMayBeMastercard && (
           <div className="notice no-print">
-            <p className="warn">
-              إيصال مدى يحمل مبلغًا في قسم <code>visa</code> الأول بينما قسم <code>VISA</code>{' '}
-              في آخر الإيصال يقول «لا يوجد عمليات». هذا هو شكل الخطأ المعروف في الطابعة، حيث
-              يُطبع تحصيل ماستركارد تحت اسم فيزا. الشكلان متطابقان على الورق فلا يمكن التمييز
-              بينهما آليًا.
-            </p>
-            <label>
-              <input
-                type="checkbox"
-                checked={treatVisaAsMastercard}
-                onChange={(event) => onTreatVisaAsMastercard(event.target.checked)}
-              />{' '}
-              احتسب المبلغ ماستركارد بدل فيزا
-            </label>
+            {/*
+              * The reason is long and it is the same reason every time, so it
+              * sits behind a mark; the choice it explains stays in the open,
+              * since that is the part a person has to make.
+              */}
+            <div className="notice-row">
+              <WarningsBubble warnings={[VISA_IS_MASTERCARD]} label="لماذا هذا الخيار؟" />
+              <label>
+                <input
+                  type="checkbox"
+                  checked={treatVisaAsMastercard}
+                  onChange={(event) => onTreatVisaAsMastercard(event.target.checked)}
+                />{' '}
+                احتسب المبلغ ماستركارد بدل فيزا
+              </label>
+            </div>
           </div>
         )}
       </Collapsible>
