@@ -10,6 +10,7 @@ import {
   TemplateFillError,
   type DailyFigures,
 } from './dailyReport'
+import { toISODate } from './dates'
 import type { CacoDetailed, CacoSummary, CacoTransaction } from './sources/caco'
 import type { MadaReconciliation } from './sources/mada'
 import type { TabsReport } from './sources/tabs'
@@ -87,6 +88,25 @@ const CACO_ROWS = [
   { orderType: 'Sales Order Payment', total: 1411.16 },
   { orderType: 'EVD Voucher', total: 0 },
 ]
+
+describe('the day a report is filed under', () => {
+  const ranged = (from: Date, to: Date | null): CacoSummary => ({
+    ...caco(CACO_ROWS),
+    parameters: { shopId: 'WFW430', from, to },
+  })
+
+  it('is the last day the pull covers, not the first', () => {
+    const figures = buildDailyFigures({
+      caco: ranged(new Date(Date.UTC(2026, 8, 17)), new Date(Date.UTC(2026, 8, 19, 23, 59))),
+    })
+    expect(toISODate(figures.date!)).toBe('2026-09-19')
+  })
+
+  it('falls back to the start when the pull names no end', () => {
+    const figures = buildDailyFigures({ caco: ranged(new Date(Date.UTC(2026, 8, 17)), null) })
+    expect(toISODate(figures.date!)).toBe('2026-09-17')
+  })
+})
 
 describe('buildDailyFigures', () => {
   it('maps the CACO order types onto the BSS rows', () => {

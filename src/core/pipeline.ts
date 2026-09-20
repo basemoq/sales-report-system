@@ -24,7 +24,11 @@ import {
   type CacoSummary,
   type CacoTransaction,
 } from './sources/caco'
-import { parseMadaReconciliation, type MadaReconciliation } from './sources/mada'
+import {
+  mergeReconciliations,
+  parseMadaReconciliation,
+  type MadaReconciliation,
+} from './sources/mada'
 import { parseTabsReport, type TabsReport } from './sources/tabs'
 import { readWorkbook, type SheetData } from './workbook'
 
@@ -342,6 +346,12 @@ export async function buildDailyReport(
   let caco: CacoSummary | undefined
   let detailed: CacoDetailed | undefined
   let tabs: TabsReport | undefined
+  /**
+   * A day can close on more than one terminal, and each prints its own slip.
+   * They are kept apart and added up at the end: taking the last one read
+   * would drop every other terminal's takings without a word.
+   */
+  const madaReceipts: MadaReconciliation[] = []
   let mada: MadaReconciliation | undefined
 
   for (const outcome of outcomes) {
@@ -366,18 +376,29 @@ export async function buildDailyReport(
 
     switch (outcome.kind) {
       case 'caco-summary':
+        if (caco !== undefined) warnings.push(secondFileWarning(outcome.file.fileName, 'caco-summary'))
         caco = parseCacoSummary(outcome.sheets!)
         break
       case 'caco-detailed':
+        if (detailed !== undefined)
+          warnings.push(secondFileWarning(outcome.file.fileName, 'caco-detailed'))
         detailed = parseCacoDetailed(outcome.sheets!)
         break
       case 'tabs':
+        if (tabs !== undefined) warnings.push(secondFileWarning(outcome.file.fileName, 'tabs'))
         tabs = parseTabsReport(outcome.items!)
         break
       case 'mada':
-        mada = parseMadaReconciliation(outcome.items!)
+        madaReceipts.push(parseMadaReconciliation(outcome.items!))
         break
     }
+  }
+
+  mada = mergeReconciliations(madaReceipts)
+  if (madaReceipts.length > 1) {
+    warnings.push(
+      `جُمعت ${madaReceipts.length} موازنات مدى في أرقام واحدة — إجمالي مدى ${mada!.cards.mada.toFixed(2)}، فيزا ${mada!.cards.visa.toFixed(2)}، ماستركارد ${mada!.cards.mastercard.toFixed(2)}. تأكّد أن كل موازنة تخص نفس اليوم ولم تُرفع مرتين.`,
+    )
   }
 
   if (caco === undefined && detailed === undefined && tabs === undefined && mada === undefined) {
@@ -413,6 +434,7 @@ export async function buildDailyReport(
   }
 
   warnings.push(...crossCheck(caco, detailed))
+  warnings.push(...rangeCheck(caco, detailed))
 
   // A refund that was deducted is shown beside the figures it changed; one that
   // could not be placed is a warning, since it is still in them.
@@ -567,6 +589,41 @@ function countedForEmployees(detailed?: CacoDetailed): CacoTransaction[] {
   return detailed.transactions.filter((transaction) => !dropped.has(transaction))
 }
 
+const KIND_NAMES: Record<SourceKind, string> = {
+  'caco-summary': 'CACO المختصر',
+  'caco-detailed': 'CACO المفصّل',
+  tabs: 'TABS',
+  mada: 'موازنة مدى',
+}
+
+/**
+ * Two files of the same kind in one day: the second replaces the first, and a
+ * replaced export is money off the report. Only mada slips add up.
+ */
+const secondFileWarning = (fileName: string, kind: SourceKind): string =>
+  `رُفع أكثر من ملف «${KIND_NAMES[kind]}» — اعتُمد «${fileName}» وأُهمل ما قبله. ارفع ملفًا واحدًا من كل نوع.`
+
+/**
+ * A pull that covers more than one day is still filed under one date, so the
+ * day it is filed under carries days that are not its own.
+ */
+function rangeCheck(caco?: CacoSummary, detailed?: CacoDetailed): string[] {
+  const warnings: string[] = []
+  for (const [name, parameters] of [
+    ['CACO المختصر', caco?.parameters],
+    ['CACO المفصّل', detailed?.parameters],
+  ] as const) {
+    const from = parameters?.from
+    const to = parameters?.to
+    if (!from || !to) continue
+    if (toISODate(from) === toISODate(to)) continue
+    warnings.push(
+      `${name}: النطاق المسحوب من ${toISODate(from)} إلى ${toISODate(to)} — أكثر من يوم واحد. سيُسجَّل المجموع كله باسم ${toISODate(to)}. اسحب التقرير ليوم واحد إن أردت تقريرًا يوميًا.`,
+    )
+  }
+  return warnings
+}
+
 /**
  * The two CACO exports describe the same day from different angles, so their
  * totals must agree. A gap means one of them was run over a different range.
@@ -590,7 +647,7 @@ function crossCheck(caco?: CacoSummary, detailed?: CacoDetailed): string[] {
     const summed = detailed.transactions.reduce((sum, t) => sum + t.amount, 0)
     if (Math.abs(summed - caco.grandTotal) > 0.01) {
       warnings.push(
-        `إجمالي CACO المختصر ${caco.grandTotal.toFixed(2)} لا يطابق مجموع المفصّل ${summed.toFixed(2)}.`,
+        `إجمالي CACO المختصر ${caco.grandTotal.toFixed(2)} لا يطابق مجموع المفصّل ${summed.toFixed(2)} — فرق ${Math.abs(caco.grandTotal - summed).toFixed(2)}. الغالب أن التقريرين سُحبا بنطاق زمني مختلف أو بمرشّح طرق دفع مختلف. أعد سحبهما بنفس المعايير.`,
       )
     }
     if (caco.parameters.shopId !== detailed.parameters.shopId) {
