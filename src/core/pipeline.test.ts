@@ -11,11 +11,11 @@ async function workbookUpload(
   return { fileName, bytes: (await workbook.xlsx.writeBuffer()) as ArrayBuffer }
 }
 
-function parameterBand(sheet: ExcelJS.Worksheet, shopId = 'WFW430') {
+function parameterBand(sheet: ExcelJS.Worksheet, shopId = 'WFW430', to = 'Sep 13,2026 23:59') {
   sheet.getCell('A5').value = 'Transaction Date & Time From'
   sheet.getCell('B5').value = 'Sep 13,2026 00:00'
   sheet.getCell('A6').value = 'Transaction Date & Time To'
-  sheet.getCell('B6').value = 'Sep 13,2026 23:59'
+  sheet.getCell('B6').value = to
   sheet.getCell('A7').value = 'Shop ID'
   sheet.getCell('B7').value = shopId
 }
@@ -316,5 +316,44 @@ describe('buildDailyReport', () => {
     ])
 
     expect(report.unrecognised[0].reason).toContain('PDF')
+  })
+})
+
+describe('a day that is not one day', () => {
+  const overThreeDays = (fileName = 'range.xlsx') =>
+    workbookUpload(fileName, (sheet) => {
+      sheet.getCell('A1').value = 'Finance CACO report (summary)'
+      parameterBand(sheet, 'WFW430', 'Sep 15,2026 23:59')
+      sheet.getCell('A10').value = 'PAYMENT_ORDER_TYPE'
+      sheet.getCell('B10').value = 'Cash'
+      sheet.getCell('A11').value = 'Top Up'
+      sheet.getCell('B11').value = 100
+      sheet.getCell('A12').value = 'total'
+      sheet.getCell('B12').value = 100
+    })
+
+  it('says so, and says which day it will be filed under', async () => {
+    const report = await buildDailyReport([await overThreeDays()], new Map())
+    expect(report.reportDate).toBe('2026-09-15')
+    expect(report.warnings.some((warning) => warning.includes('أكثر من يوم واحد'))).toBe(true)
+  })
+
+  it('keeps quiet when the pull covers a single day', async () => {
+    const report = await buildDailyReport([await cacoSummary()], new Map())
+    expect(report.warnings.some((warning) => warning.includes('أكثر من يوم واحد'))).toBe(false)
+  })
+})
+
+describe('a second export of a kind that cannot be added up', () => {
+  it('is not swapped in silently', async () => {
+    const report = await buildDailyReport(
+      [await cacoSummary('first.xlsx'), await cacoSummary('second.xlsx', 'WFW431')],
+      new Map(),
+    )
+    expect(
+      report.warnings.some(
+        (warning) => warning.includes('رُفع أكثر من ملف') && warning.includes('second.xlsx'),
+      ),
+    ).toBe(true)
   })
 })

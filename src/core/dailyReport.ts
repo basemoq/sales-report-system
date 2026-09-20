@@ -417,8 +417,13 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
   )
 
   return {
+    // A pull that spans several days is filed under the last one it covers:
+    // the day the operator closed on, and the day the takings were counted.
+    // `from` would file the whole range under a day already reported.
     date:
+      sources.caco?.parameters.to ??
       sources.caco?.parameters.from ??
+      sources.detailed?.parameters.to ??
       sources.detailed?.parameters.from ??
       sources.mada?.terminalDate ??
       null,

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { toISODate } from '../dates'
 import type { PdfTextItem } from '../pdf'
-import { MadaFormatError, parseMadaReconciliation } from './mada'
+import {
+  MadaFormatError,
+  mergeReconciliations,
+  parseMadaReconciliation,
+  type MadaReconciliation,
+} from './mada'
 
 const MARGIN = 183
 
@@ -301,5 +306,69 @@ describe('a receipt read off a scan', () => {
     expect(report.disagreements).toEqual([
       { scheme: 'SPAN', totals: 3987.31, debit: 3987.81 },
     ])
+  })
+})
+
+describe('mergeReconciliations', () => {
+  const slip = (over: Partial<MadaReconciliation> = {}): MadaReconciliation => ({
+    terminalDate: null,
+    schemes: [],
+    cards: { mada: 0, visa: 0, mastercard: 0 },
+    unmapped: [],
+    unread: [],
+    disagreements: [],
+    totalsMatched: true,
+    visaMayBeMastercard: false,
+    ...over,
+  })
+
+  it('has nothing to report when no receipt was read', () => {
+    expect(mergeReconciliations([])).toBeUndefined()
+  })
+
+  it('leaves a lone receipt exactly as it was', () => {
+    const only = slip({ cards: { mada: 458, visa: 0, mastercard: 0 } })
+    expect(mergeReconciliations([only])).toBe(only)
+  })
+
+  it('adds up every terminal rather than keeping the last', () => {
+    const merged = mergeReconciliations([
+      slip({ cards: { mada: 458, visa: 0, mastercard: 0 } }),
+      slip({ cards: { mada: 1471.85, visa: 39, mastercard: 0 } }),
+      slip({ cards: { mada: 1864.65, visa: 65.6, mastercard: 0 } }),
+    ])
+    expect(merged?.cards).toEqual({ mada: 3794.5, visa: 104.6, mastercard: 0 })
+  })
+
+  it('carries the money to halalas, leaving no float dust', () => {
+    const merged = mergeReconciliations([
+      slip({ cards: { mada: 0.1, visa: 0, mastercard: 0 } }),
+      slip({ cards: { mada: 0.2, visa: 0, mastercard: 0 } }),
+    ])
+    expect(merged?.cards.mada).toBe(0.3)
+  })
+
+  it('files the joined figures under the latest terminal date', () => {
+    const merged = mergeReconciliations([
+      slip({ terminalDate: new Date('2026-09-17T23:50:00Z') }),
+      slip({ terminalDate: new Date('2026-09-19T23:50:00Z') }),
+      slip({ terminalDate: null }),
+    ])
+    expect(toISODate(merged!.terminalDate!)).toBe('2026-09-19')
+  })
+
+  it('keeps every receipt\'s holes and disagreements, and matches only when all did', () => {
+    const merged = mergeReconciliations([
+      slip({ unread: ['VISA'], totalsMatched: true }),
+      slip({
+        disagreements: [{ scheme: 'MADA', totals: 10, debit: 11 }],
+        totalsMatched: false,
+        visaMayBeMastercard: true,
+      }),
+    ])
+    expect(merged?.unread).toEqual(['VISA'])
+    expect(merged?.disagreements).toHaveLength(1)
+    expect(merged?.totalsMatched).toBe(false)
+    expect(merged?.visaMayBeMastercard).toBe(true)
   })
 })

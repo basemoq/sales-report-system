@@ -312,6 +312,50 @@ export function parseMadaReconciliation(
   }
 }
 
+/**
+ * Several settlement slips read as one.
+ *
+ * A terminal is balanced at the end of every day, so a report covering more
+ * than one day comes with more than one slip — and a showroom with two
+ * terminals brings two for the same day. What the day owes on cards is all of
+ * them added up; taking one and dropping the rest is money missing from the
+ * deposit.
+ *
+ * Everything that needs a person's eye is kept from every slip: an unread
+ * section, a figure printed two ways, a scheme with no column. The date is the
+ * latest of them, since that is the day the batch closes on.
+ */
+export function mergeReconciliations(
+  receipts: readonly MadaReconciliation[],
+): MadaReconciliation | undefined {
+  if (receipts.length === 0) return undefined
+  if (receipts.length === 1) return receipts[0]
+
+  const latest = receipts
+    .map((receipt) => receipt.terminalDate)
+    .filter((date): date is Date => date !== null)
+    .sort((a, b) => b.getTime() - a.getTime())[0]
+
+  return {
+    terminalDate: latest ?? null,
+    schemes: receipts.flatMap((receipt) => receipt.schemes),
+    cards: {
+      mada: round2(receipts.reduce((sum, receipt) => sum + receipt.cards.mada, 0)),
+      visa: round2(receipts.reduce((sum, receipt) => sum + receipt.cards.visa, 0)),
+      mastercard: round2(receipts.reduce((sum, receipt) => sum + receipt.cards.mastercard, 0)),
+    },
+    unmapped: receipts.flatMap((receipt) => receipt.unmapped),
+    unread: receipts.flatMap((receipt) => receipt.unread),
+    disagreements: receipts.flatMap((receipt) => receipt.disagreements),
+    // One slip that did not balance is enough to say the day did not.
+    totalsMatched: receipts.every((receipt) => receipt.totalsMatched),
+    visaMayBeMastercard: receipts.some((receipt) => receipt.visaMayBeMastercard),
+  }
+}
+
+/** Money is carried to halalas; summing raw floats leaves artefacts. */
+const round2 = (value: number): number => Math.round(value * 100) / 100
+
 const DATE_TEXT = /^\d{2}\/\d{2}\/\d{4}$/
 
 function findTerminalDate(items: readonly PdfTextItem[]): string | null {
