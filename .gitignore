@@ -31,3 +31,7 @@ worker/build
 # …but the pasted bundle is a deliverable, not a build artefact.
 !worker/dist/
 !worker/dist/worker.js
+
+# Python bytecode from skill scripts.
+__pycache__/
+*.pyc
