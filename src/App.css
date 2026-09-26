@@ -17,7 +17,15 @@
   --accent: #14417a;
   --accent-hover: #0f335f;
   --accent-text: #ffffff;
-  --focus: #9dbbe6;
+  /*
+   * The focus ring is measured, not picked: it carries the whole keyboard
+   * story, so it has to clear 3:1 against every surface it can land on
+   * (page, card, panel head, and each of the soft status grounds). The old
+   * pale blue managed 1.8:1 against the page and was effectively invisible.
+   * Brand blue clears 8.8:1 at worst, and `outline-offset` keeps it off the
+   * filled button it shares a colour with.
+   */
+  --focus: #14417a;
 
   --danger: #a4231d;
   --danger-soft: #fdf0ef;
@@ -46,7 +54,10 @@
     --accent: #2f6ec0;
     --accent-hover: #3a7dd4;
     --accent-text: #ffffff;
-    --focus: #3a6ea8;
+    /* Same rule inverted. The old ring sat at 1.03:1 on the filled button —
+     * one shade of blue on another — so focus vanished exactly on the
+     * primary action. This clears 3.3:1 there and 10:1 everywhere else. */
+    --focus: #b9d4f2;
 
     --danger: #f2837a;
     --danger-soft: #2a1918;
@@ -212,7 +223,9 @@ button.link.danger {
   color: var(--danger);
 }
 
-:where(button, select, input, a):focus-visible {
+/* `summary` is focusable too, and was the one control still falling back to
+ * the browser's own outline instead of the ring the rest of the page uses. */
+:where(button, select, input, a, summary):focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -1554,4 +1567,23 @@ details[open] > summary .collapsible-arrow {
 
 .notice-row .warn-mark {
   margin-top: 0;
+}
+
+/* ---------- motion, for those who would rather not ---------- */
+
+/*
+ * Four transitions in the whole sheet, and only one of them moves anything: the
+ * arrow that turns as a section opens. Honouring the preference costs nothing
+ * and the arrow still ends up pointing the right way, it just gets there
+ * without the sweep.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
