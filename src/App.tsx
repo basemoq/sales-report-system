@@ -9,6 +9,13 @@ import type { CardTotals } from './core/sources/mada'
 import { parseNumber } from './core/text'
 import type { DailyReportBuild } from './core/pipeline'
 import { getTemplateBytes } from './core/activeTemplate'
+import {
+  fillStockTemplate,
+  getStockTemplateBytes,
+  parseCount,
+  readStockLayout,
+  type StockLayout,
+} from './core/stockReport'
 import type { SavedReportData } from './core/savedReport'
 import {
   getReport,
@@ -25,7 +32,8 @@ import { Stepper } from './ui/Stepper'
 import { SummaryStrip } from './ui/SummaryStrip'
 import { Icon } from './ui/Icon'
 import { UploadPanel } from './ui/UploadPanel'
-import { reportFileName } from './ui/format'
+import { StockPanel } from './ui/StockPanel'
+import { reportFileName, stockFileName } from './ui/format'
 import './App.css'
 
 /** Names offered in the header pickers; anything else is typed under «أخرى». */
@@ -40,8 +48,84 @@ type SaveState =
 
 type FillState =
   | { kind: 'idle' }
-  | { kind: 'done'; written: number; warnings: string[] }
+  | { kind: 'done'; written: number; counted: number; warnings: string[] }
   | { kind: 'error'; message: string }
+
+const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+/** The day's count survives a reload of the page, per shop and day. */
+const stockDraftKey = (shopId: string | null, isoDate: string) =>
+  `stock-draft:${shopId ?? '-'}:${isoDate}`
+
+interface StockDraft {
+  values: Record<string, string>
+  comments: string
+}
+
+function readStockDraft(key: string): StockDraft {
+  try {
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? (JSON.parse(raw) as Partial<StockDraft>) : null
+    return {
+      values: parsed && typeof parsed.values === 'object' && parsed.values ? parsed.values : {},
+      comments: typeof parsed?.comments === 'string' ? parsed.comments : '',
+    }
+  } catch {
+    return { values: {}, comments: '' }
+  }
+}
+
+function writeStockDraft(key: string, draft: StockDraft) {
+  try {
+    localStorage.setItem(key, JSON.stringify(draft))
+  } catch {
+    // A private window or full storage: the count still downloads, it just
+    // does not outlive the page.
+  }
+}
+
+function toBase64(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes)
+  let binary = ''
+  for (let offset = 0; offset < view.length; offset += 0x8000) {
+    binary += String.fromCharCode(...view.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
+/**
+ * Inside the control center the page is framed, and the frame is what sends the
+ * two files to the branch mailbox. Standalone there is no parent and nothing is
+ * posted; the message never leaves the site's own origin.
+ */
+function handToHost(message: {
+  reportDate: string
+  shopId: string | null
+  showroom: string
+  supervisor: string
+  files: { name: string; bytes: ArrayBuffer }[]
+}) {
+  if (window.parent === window) return
+  try {
+    window.parent.postMessage(
+      {
+        type: 'sales-report:final',
+        reportDate: message.reportDate,
+        shopId: message.shopId,
+        showroom: message.showroom,
+        supervisor: message.supervisor,
+        files: message.files.map((file) => ({
+          name: file.name,
+          type: XLSX_TYPE,
+          base64: toBase64(file.bytes),
+        })),
+      },
+      window.location.origin,
+    )
+  } catch {
+    // A parent on another origin cannot be told; the downloads stand on their own.
+  }
+}
 
 function download(bytes: ArrayBuffer, fileName: string) {
   const url = URL.createObjectURL(
@@ -74,6 +158,36 @@ export default function App() {
     Partial<Record<keyof CardTotals, string>>
   >({})
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
+  const [stockLayout, setStockLayout] = useState<StockLayout | null>(null)
+  const [stockError, setStockError] = useState<string | null>(null)
+  /** What was typed, tagged with the shop and day it was typed for. */
+  const [stockEdit, setStockEdit] = useState<{ key: string; draft: StockDraft } | null>(null)
+
+  useEffect(() => {
+    let live = true
+    getStockTemplateBytes()
+      .then(readStockLayout)
+      .then((layout) => live && setStockLayout(layout))
+      .catch((cause: Error) => live && setStockError(cause.message))
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const stockKey = report ? stockDraftKey(report.shopId, report.reportDate) : null
+  // A new day's files bring that day's count back, or an empty one.
+  const stock: StockDraft =
+    stockKey === null
+      ? { values: {}, comments: '' }
+      : stockEdit && stockEdit.key === stockKey
+        ? stockEdit.draft
+        : readStockDraft(stockKey)
+
+  function updateStock(next: StockDraft) {
+    if (stockKey === null) return
+    setStockEdit({ key: stockKey, draft: next })
+    writeStockDraft(stockKey, next)
+  }
   const [savedCount, setSavedCount] = useState(0)
 
   /**
@@ -163,15 +277,64 @@ export default function App() {
   async function fillTemplate() {
     if (report === null || figures === null) return
     try {
+      // The count is checked before anything downloads: a half-typed number is
+      // fixed in a second, a wrong one in the region's sheet is not.
+      const counts: Record<string, number | null> = {}
+      const invalid: string[] = []
+      for (const device of stockLayout?.devices ?? []) {
+        const parsed = parseCount(stock.values[device.header] ?? '')
+        if (parsed === 'invalid') invalid.push(device.label)
+        else counts[device.header] = parsed
+      }
+      if (invalid.length > 0) {
+        setFill({
+          kind: 'error',
+          message: `عدد غير صحيح في جرد الأجهزة: ${invalid.join('، ')} — أرقام صحيحة فقط.`,
+        })
+        return
+      }
+
       const result = await fillDailyTemplate(await getTemplateBytes(), figures, {
         ...identity,
         shopId: report.shopId,
       })
-      download(result.bytes, reportFileName(report.reportDate))
+      const salesName = reportFileName(report.reportDate)
+      const files = [{ name: salesName, bytes: result.bytes }]
+      const warnings = [...result.warnings]
+      let counted = 0
+
+      if (stockLayout) {
+        const filled = await fillStockTemplate(await getStockTemplateBytes(), {
+          shopId: report.shopId,
+          counts,
+          comments: stock.comments,
+        })
+        counted = filled.counted
+        files.push({ name: stockFileName(report.shopId, report.reportDate), bytes: filled.bytes })
+        if (counted === 0) warnings.push('جرد الأجهزة فارغ — نُزّل ملفه بلا أعداد.')
+      } else {
+        warnings.push(`لم يُنزَّل جرد الأجهزة: ${stockError ?? 'قالب الجرد غير جاهز بعد.'}`)
+      }
+
+      download(result.bytes, salesName)
+      // A second download in the same click is held back a moment: some
+      // browsers drop one that starts while the first is still being handed over.
+      for (const file of files.slice(1)) {
+        await new Promise((resolve) => setTimeout(resolve, 700))
+        download(file.bytes, file.name)
+      }
+      handToHost({
+        reportDate: report.reportDate,
+        shopId: report.shopId,
+        showroom: identity.showroom,
+        supervisor: identity.supervisor,
+        files,
+      })
       setFill({
         kind: 'done',
         written: result.written.length,
-        warnings: result.warnings,
+        counted,
+        warnings,
       })
     } catch (cause) {
       setFill({ kind: 'error', message: (cause as Error).message })
@@ -224,6 +387,19 @@ export default function App() {
           }
           receiptImages={report.receiptImages}
           onTreatVisaAsMastercard={setVisaIsMastercard}
+        />
+      )}
+
+      {report && figures && (
+        <StockPanel
+          layout={stockLayout}
+          error={stockError}
+          values={stock.values}
+          comments={stock.comments}
+          onValue={(header, value) =>
+            updateStock({ ...stock, values: { ...stock.values, [header]: value } })
+          }
+          onComments={(comments) => updateStock({ ...stock, comments })}
         />
       )}
 
@@ -299,7 +475,10 @@ export default function App() {
               <>
                 <div className="note ok">
                   <Icon name="success" />
-                  <p>تم تنزيل القالب بعد تعبئة {fill.written} خانة.</p>
+                  <p>
+                    تم تنزيل القالب بعد تعبئة {fill.written} خانة
+                    {stockLayout && `، وجرد الأجهزة (${fill.counted} جهاز)`}.
+                  </p>
                 </div>
                 {fill.warnings.map((warning) => (
                   <div key={warning} className="note warn">
