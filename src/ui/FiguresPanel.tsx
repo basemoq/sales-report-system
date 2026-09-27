@@ -139,7 +139,7 @@ export function FiguresPanel({
 
       {supersededExcluded > 0 && (
         <p className="muted">
-          يوجد عملية ملغاة (Superseded) بلا مرتجع — تم استبعاد{' '}
+          يوجد عملية ملغاة (Superseded / Cancelled) بلا مرتجع — تم استبعاد{' '}
           {formatMoney(supersededExcluded)} من التقرير. التفاصيل في التنبيهات.
         </p>
       )}

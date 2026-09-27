@@ -5,6 +5,7 @@ import {
   applyManualCards,
   exclusionReport,
   fillDailyTemplate,
+  matchRefunds,
   reassignVisaToMastercard,
   refundSummary,
   TemplateFillError,
@@ -651,6 +652,77 @@ describe('refunds against a superseded sale', () => {
     expect(refundSummary(sources).deducted).toBe(0)
     expect(exclusionReport(sources).supersededExcluded).toBe(50)
     expect(exclusionReport(sources).warnings[0]).toContain('Superseded')
+  })
+
+  it('pairs identical refunds with the cancelled orders, not a real sale on the same account', () => {
+    // The shape from a real pull: a processed 259.00 sale and two superseded
+    // 259.00 orders on one account, and two 259.00 refunds for the superseded
+    // pair. Both refunds used to land on the processed sale, leaving the
+    // superseded pair "unrefunded" — excluded on top of the refunds, 518 off twice.
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({ orderType: 'Setup Fee', amount: 259, account: '1020010610', msisdn: '831034754173', salesOrderNumber: '1011517591', status: 'Processed' }),
+          row({ orderType: 'Setup Fee', amount: 259, account: '1020010610', msisdn: '831030217859', salesOrderNumber: '1113046523', status: 'Superseded' }),
+          row({ orderType: 'Setup Fee', amount: 259, account: '1020010610', msisdn: '831030217859', salesOrderNumber: '1659061605', status: 'Superseded' }),
+          row({ orderType: 'Refund', amount: -259, account: '1020010610', msisdn: '831030217859' }),
+          row({ orderType: 'Refund', amount: -259, account: '1020010610', msisdn: '831030217859' }),
+        ],
+      },
+    }
+
+    const pairs = matchRefunds(sources.detailed).map((match) => match.reversed?.salesOrderNumber)
+    expect(pairs).toEqual(['1113046523', '1659061605'])
+    // Only the processed sale is left: each cancelled order nets off its refund.
+    expect(buildDailyFigures(sources).bss.ordering).toBe(259)
+    expect(exclusionReport(sources).supersededExcluded).toBe(0)
+    expect(refundSummary(sources).deducted).toBe(518)
+  })
+
+  it('takes a cancelled order no refund reverses out of the figures, and names it', () => {
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({ orderType: 'Top Up', amount: 40.25, msisdn: '966597317440', salesOrderNumber: '1282874702', status: 'Cancelled' }),
+          row({ orderType: 'Top Up', amount: 100, msisdn: '966500000000', status: 'Processed' }),
+        ],
+      },
+    }
+
+    expect(buildDailyFigures(sources).bss.cashSales).toBe(100)
+    const report = exclusionReport(sources)
+    expect(report.supersededExcluded).toBe(40.25)
+    expect(report.warnings[0]).toContain('Cancelled')
+    expect(report.warnings[0]).toContain('1282874702')
+  })
+
+  it('nets a cancelled order against its refund once, not twice', () => {
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({ orderType: 'Setup Fee', amount: 50, msisdn: '9665', status: 'Cancelled' }),
+          row({ orderType: 'Refund', amount: -50, msisdn: '9665' }),
+        ],
+      },
+    }
+
+    expect(buildDailyFigures(sources).bss.ordering).toBe(0)
+    expect(exclusionReport(sources).supersededExcluded).toBe(0)
   })
 
   it('does not reverse a sale twice with one refund each', () => {
