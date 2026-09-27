@@ -134,15 +134,15 @@ const NAMED_ORDER_TYPES = new Map<string, keyof BssTotals | null>([
 ])
 
 const REFUND = matchKey('Refund')
-const SUPERSEDED = matchKey('Superseded')
+const VOIDED_STATUSES = new Set([matchKey('Superseded'), matchKey('Cancelled')])
 
 /**
- * A sales order the BSS replaced rather than completed. The row stays in the
- * export at its full amount, so it is in both CACO totals whether or not the
- * customer ever paid it.
+ * A sales order the BSS replaced (`Superseded`) or called off (`Cancelled`)
+ * rather than completed. The row stays in the export at its full amount, so it
+ * is in both CACO totals whether or not the customer ever paid it.
  */
-const isSuperseded = (transaction: CacoTransaction): boolean =>
-  matchKey((transaction.status ?? '').trim()) === SUPERSEDED
+const isVoided = (transaction: CacoTransaction): boolean =>
+  VOIDED_STATUSES.has(matchKey((transaction.status ?? '').trim()))
 
 /** Which template row a transaction belongs to; null for a row with none. */
 function bucketOf(transaction: CacoTransaction): keyof BssTotals | null {
@@ -181,18 +181,39 @@ export interface RefundMatch {
 export function matchRefunds(detailed: CacoDetailed): RefundMatch[] {
   const sales = detailed.transactions.filter((transaction) => !isRefund(transaction))
   const taken = new Set<CacoTransaction>()
+  const sameMsisdn = (refund: CacoTransaction, sale: CacoTransaction): boolean =>
+    refund.msisdn !== null && refund.msisdn === sale.msisdn
 
-  return detailed.transactions.filter(isRefund).map((refund) => ({
-    refund,
-    reversed: sales.find((sale) => !taken.has(sale) && reverses(refund, sale)) ?? null,
-  })).map((match) => {
-    if (match.reversed) taken.add(match.reversed)
-    return match
+  // A refund reverses a cancelled order, so a voided sale on the same line is
+  // preferred over a completed one that merely shares the account and amount —
+  // otherwise the refund lands on a real sale and the voided one is excluded
+  // on top of it, taking the money off twice. Observed on a real pull: two
+  // superseded 259.00 orders, each refunded, on an account that also had a
+  // processed 259.00 sale rung minutes later.
+  const preferences: Array<(refund: CacoTransaction, sale: CacoTransaction) => boolean> = [
+    (refund, sale) => isVoided(sale) && sameMsisdn(refund, sale),
+    (_refund, sale) => isVoided(sale),
+    (refund, sale) => sameMsisdn(refund, sale),
+    () => true,
+  ]
+
+  // Each sale is taken the moment it is matched, so two identical refunds never
+  // land on the same sale.
+  return detailed.transactions.filter(isRefund).map((refund) => {
+    let reversed: CacoTransaction | null = null
+    for (const prefer of preferences) {
+      reversed =
+        sales.find((sale) => !taken.has(sale) && reverses(refund, sale) && prefer(refund, sale)) ??
+        null
+      if (reversed) break
+    }
+    if (reversed) taken.add(reversed)
+    return { refund, reversed }
   })
 }
 
 /**
- * Superseded sales orders that no refund reverses.
+ * Superseded or cancelled sales orders that no refund reverses.
  *
  * A cancelled order is settled one of two ways. Either a `Refund` row carries
  * the money back out — `matchRefunds` finds those and they net off — or the
@@ -216,7 +237,7 @@ export function unrefundedSuperseded(detailed: CacoDetailed): CacoTransaction[] 
   )
 
   return detailed.transactions.filter(
-    (transaction) => isSuperseded(transaction) && !reversed.has(transaction),
+    (transaction) => isVoided(transaction) && !reversed.has(transaction),
   )
 }
 
@@ -350,7 +371,7 @@ export function exclusionReport(sources: DailySources): ExclusionReport {
       const order = transaction.salesOrderNumber ?? transaction.receiptNo ?? '—'
       const line = transaction.msisdn ?? transaction.account ?? '—'
       warnings.push(
-        `عملية ملغاة (Superseded) بمبلغ ${transaction.amount.toFixed(2)} على ${line} — أمر البيع ${order}${transaction.time ? ` الساعة ${transaction.time}` : ''} — لم يقابلها مرتجع، فاستُبعدت من المبيعات. راجعها يدويًا.`,
+        `عملية ملغاة (${(transaction.status ?? 'Superseded').trim()}) بمبلغ ${transaction.amount.toFixed(2)} على ${line} — أمر البيع ${order}${transaction.time ? ` الساعة ${transaction.time}` : ''} — لم يقابلها مرتجع، فاستُبعدت من المبيعات. راجعها يدويًا.`,
       )
     }
   } else if (sources.caco) {
