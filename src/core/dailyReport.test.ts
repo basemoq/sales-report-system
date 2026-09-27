@@ -706,6 +706,37 @@ describe('refunds against a superseded sale', () => {
     expect(report.warnings[0]).toContain('1282874702')
   })
 
+  it('with the summary, takes a cancelled top-up off Ordering — where the summary counted it', () => {
+    // A real pull (24–26 Sep): a top-up rung as a sales order and cancelled.
+    // The summary had it in Sales Order Payment (4,192.25 = 4,152.00 of orders
+    // + 40.25), and Top Up was 595.19 without it. Taking it off Top Up gave
+    // Cash Sales 554.94 / Ordering 3,274.75 — the right total, the wrong split.
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const sources = {
+      caco: caco([
+        { orderType: 'Top Up', total: 100 },
+        { orderType: 'Sales Order Payment', total: 240.25 },
+      ]),
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({ orderType: 'Top Up', amount: 40.25, msisdn: '966597317440', salesOrderNumber: '1282874702', status: 'Cancelled' }),
+          row({ orderType: 'Top Up', amount: 100, msisdn: '966500000000', status: null }),
+          row({ orderType: 'Setup Fee', amount: 200, msisdn: '966511111111', salesOrderNumber: '1', status: 'Processed' }),
+        ],
+      },
+    }
+    const bss = buildDailyFigures(sources).bss
+    expect(bss.cashSales).toBe(100)
+    expect(bss.ordering).toBe(200)
+    // And the same split as the detailed export on its own.
+    const alone = buildDailyFigures({ detailed: sources.detailed }).bss
+    expect([alone.cashSales, alone.ordering]).toEqual([bss.cashSales, bss.ordering])
+  })
+
   it('nets a cancelled order against its refund once, not twice', () => {
     const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
       ...detailed([['x', 0]]).transactions[0],
@@ -867,3 +898,4 @@ describe('what the file shows before Excel recalculates it', () => {
     expect((sheet.getCell('E13').value as { result?: number }).result).toBeUndefined()
   })
 })
+
