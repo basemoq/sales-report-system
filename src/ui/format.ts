@@ -40,3 +40,8 @@ export function formatDayLabel(isoDate: string): string {
 export function reportFileName(isoDate: string): string {
   return `sales-report-${isoDate}.xlsx`
 }
+
+/** The stock sheet's file name: Latin for the same reason, and shop + day. */
+export function stockFileName(shopId: string | null, isoDate: string): string {
+  return `stock-${shopId ? `${shopId}-` : ''}${isoDate}.xlsx`
+}
