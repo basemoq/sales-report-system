@@ -209,7 +209,7 @@ describe('buildDailyReport', () => {
     // The one warning the summary alone earns: it carries no status column, so
     // a cancelled order cannot be told from a completed one in it.
     expect(report.warnings).toEqual([
-      'تقرير CACO المختصر لا يحمل حالة أمر البيع، فلا يمكن كشف العمليات الملغاة (Superseded) منه — ارفع التقرير المفصّل للتأكد.',
+      'رُفع تقرير CACO المختصر بدون المفصّل: المختصر لا يحمل حالة أمر البيع، فالعمليات الملغاة (Superseded / Cancelled) التي لا يقابلها مرتجع تبقى محسوبة وقد يرتفع الإجمالي — ارفع التقرير المفصّل معه.',
     ])
   })
 

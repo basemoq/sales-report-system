@@ -241,10 +241,24 @@ export function unrefundedSuperseded(detailed: CacoDetailed): CacoTransaction[] 
   )
 }
 
-/** Takes each unreversed superseded order off the row it was counted in. */
+/**
+ * The summary row a transaction was counted in. The summary files anything rung
+ * as a sales order under `Sales Order Payment`, whatever the detailed export's
+ * description says: a top-up rung as an order and then cancelled carries a
+ * sales order number, and on a real pull its 40.25 sat in the summary's
+ * `Sales Order Payment` row, not in `Top Up`. Taking it off `Top Up` moved
+ * 40.25 from Cash Sales to Ordering — the totals agreed, the split did not.
+ */
+function summaryBucketOf(transaction: CacoTransaction): keyof BssTotals | null {
+  const bucket = bucketOf(transaction)
+  const rungAsOrder = (transaction.salesOrderNumber ?? '').trim() !== ''
+  return bucket === 'cashSales' && rungAsOrder ? 'ordering' : bucket
+}
+
+/** Takes each unreversed superseded order off the summary row it was counted in. */
 function applySuperseded(totals: BssTotals, detailed: CacoDetailed): BssTotals {
   for (const transaction of unrefundedSuperseded(detailed)) {
-    const bucket = bucketOf(transaction)
+    const bucket = summaryBucketOf(transaction)
     if (bucket !== null) totals[bucket] -= transaction.amount
   }
   return totals
@@ -378,7 +392,7 @@ export function exclusionReport(sources: DailySources): ExclusionReport {
     // The summary carries no status column, so a cancelled order is
     // indistinguishable from a completed one in it.
     warnings.push(
-      'تقرير CACO المختصر لا يحمل حالة أمر البيع، فلا يمكن كشف العمليات الملغاة (Superseded) منه — ارفع التقرير المفصّل للتأكد.',
+      'رُفع تقرير CACO المختصر بدون المفصّل: المختصر لا يحمل حالة أمر البيع، فالعمليات الملغاة (Superseded / Cancelled) التي لا يقابلها مرتجع تبقى محسوبة وقد يرتفع الإجمالي — ارفع التقرير المفصّل معه.',
     )
   }
 
