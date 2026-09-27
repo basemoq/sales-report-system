@@ -9,6 +9,7 @@ import type { CardTotals } from './core/sources/mada'
 import { parseNumber } from './core/text'
 import type { DailyReportBuild } from './core/pipeline'
 import { getTemplateBytes } from './core/activeTemplate'
+import { sha256Hex } from './core/hash'
 import {
   fillStockTemplate,
   getStockTemplateBytes,
@@ -103,6 +104,8 @@ function handToHost(message: {
   shopId: string | null
   showroom: string
   supervisor: string
+  /** What the files say, hashed: the same day pressed twice is one send. */
+  fingerprint: string
   files: { name: string; bytes: ArrayBuffer }[]
 }) {
   if (window.parent === window) return
@@ -114,6 +117,7 @@ function handToHost(message: {
         shopId: message.shopId,
         showroom: message.showroom,
         supervisor: message.supervisor,
+        fingerprint: message.fingerprint,
         files: message.files.map((file) => ({
           name: file.name,
           type: XLSX_TYPE,
@@ -323,11 +327,26 @@ export default function App() {
         await new Promise((resolve) => setTimeout(resolve, 700))
         download(file.bytes, file.name)
       }
+      // The workbooks carry the time they were written, so their bytes differ
+      // on every press; what they say does not.
+      const fingerprint = await sha256Hex(
+        new TextEncoder().encode(
+          JSON.stringify({
+            reportDate: report.reportDate,
+            shopId: report.shopId,
+            identity,
+            figures,
+            counts,
+            comments: stock.comments.trim(),
+          }),
+        ),
+      )
       handToHost({
         reportDate: report.reportDate,
         shopId: report.shopId,
         showroom: identity.showroom,
         supervisor: identity.supervisor,
+        fingerprint,
         files,
       })
       setFill({
