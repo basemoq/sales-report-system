@@ -97,6 +97,7 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
               <th>المعرض</th>
               <th>الفرع</th>
               <th>إجمالى المبيعات</th>
+              <th>الإيداع النقدي</th>
               <th>حُفظ في</th>
               <th></th>
             </tr>
@@ -111,6 +112,12 @@ export function SavedReportsPanel({ refreshToken, onDownload }: Props) {
                   <td>{saved?.shopId || '—'}</td>
                   <td className="num">
                     {saved ? formatMoney(saved.figures.totalSales) : '—'}
+                  </td>
+                  {/* Reports saved before the deposit was kept show a dash, not a zero. */}
+                  <td className="num">
+                    {typeof saved?.figures.cashDeposit === 'number'
+                      ? formatMoney(saved.figures.cashDeposit)
+                      : '—'}
                   </td>
                   <td>{report.createdAt.slice(0, 10)}</td>
                   <td>
