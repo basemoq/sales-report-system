@@ -152,6 +152,45 @@ function atMargin(items: readonly PdfTextItem[]): Set<PdfTextItem> {
 }
 
 
+/**
+ * What a browser prints around a page it saves as PDF: the address of the page
+ * in one bottom corner, the time it was printed in the other, and «page 1 of 2»
+ * beneath. A receipt opened from the bank's link and printed from the browser
+ * carries that on every page — and the address, printed far to the left of the
+ * receipt, stood next to the section head nearest the foot of the page, so that
+ * head no longer looked like it was at the margin and its section went unread
+ * (a Visa settlement of 288.00 came back as zero).
+ *
+ * The address is the anchor: nothing on a receipt itself is a URL. Its line and
+ * everything between it and the page edge are dropped — the footer when the
+ * address sits below the receipt, the header when it sits above.
+ */
+const PRINTED_ADDRESS = /^https?:\/\//i
+
+function withoutBrowserMargins(items: readonly PdfTextItem[]): PdfTextItem[] {
+  const cuts = new Map<number, { below: number; above: number }>()
+  for (const item of items) {
+    if (!PRINTED_ADDRESS.test(item.text.trim())) continue
+    const rest = items.filter((other) => other.page === item.page && !onSameLine(other, item))
+    const higher = rest.filter((other) => other.y > item.y).length
+    const lower = rest.length - higher
+    const cut = cuts.get(item.page) ?? { below: -Infinity, above: Infinity }
+    // Most of the page above the address: it is the footer. Most below: the header.
+    if (higher >= lower) cut.below = Math.max(cut.below, item.y)
+    else cut.above = Math.min(cut.above, item.y)
+    cuts.set(item.page, cut)
+  }
+  if (cuts.size === 0) return [...items]
+  return items.filter((item) => {
+    const cut = cuts.get(item.page)
+    if (!cut) return true
+    const sameLine = (y: number) => Math.abs(item.y - y) <= 2
+    if (Number.isFinite(cut.below) && (item.y < cut.below || sameLine(cut.below))) return false
+    if (Number.isFinite(cut.above) && (item.y > cut.above || sameLine(cut.above))) return false
+    return true
+  })
+}
+
 /** Reading order for a receipt: down each page, then left to right. */
 function inReadingOrder(items: readonly PdfTextItem[]): PdfTextItem[] {
   return [...items].sort(
@@ -176,7 +215,7 @@ function numbersOnBaseline(items: readonly PdfTextItem[], row: PdfTextItem): num
 export function parseMadaReconciliation(
   items: readonly PdfTextItem[],
 ): MadaReconciliation {
-  const ordered = inReadingOrder(items)
+  const ordered = inReadingOrder(withoutBrowserMargins(items))
 
   if (!ordered.some((item) => labelKey(item.text) === RECONCILIATION)) {
     throw new MadaFormatError('هذا الملف ليس إيصال موازنة مدى (Reconciliation).')
