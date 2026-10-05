@@ -309,6 +309,65 @@ describe('a receipt read off a scan', () => {
   })
 })
 
+describe('a receipt printed from the browser', () => {
+  /* Chrome's footer on every page: the address far left, the print time far right, the page count below. */
+  const footer = (page: number): PdfTextItem[] => [
+    at(50, 'https://d.surepay.sa/r', 40, page),
+    at(50, '?', 115, page),
+    at(50, 'r=H4sIAAAAAAAAADMyNjYy', 119, page),
+    at(50, '2026/10/5', 520, page),
+    at(42, '2', 514, page),
+    at(42, 'ﻣﻦ', 521, page),
+  ]
+
+  it('reads a section whose head is the last line of a page above the footer', () => {
+    const report = parseMadaReconciliation([
+      ...head(),
+      ...scheme(632, 'mada', 42, '5605.36'),
+      // The visa head and its subsection close page 1, 82 points above the footer…
+      at(132, 'visa'),
+      at(121, 'mada Host'),
+      ...footer(1),
+      // …and its figures open page 2.
+      at(667, 'TOTALS', MARGIN, 2),
+      at(667, '1', 308, 2),
+      at(667, '288.00', 386, 2),
+      at(560, 'POS TERMINAL', MARGIN, 2),
+      at(500, 'TOTALS', MARGIN, 2),
+      at(500, '1', 308, 2),
+      at(500, '288.00', 386, 2),
+      at(323, 'JB', MARGIN, 2),
+      at(310, '<NO TRANSACTIONS>', MARGIN, 2),
+      at(292, 'VISA', MARGIN, 2),
+      at(280, '<NO TRANSACTIONS>', MARGIN, 2),
+      ...footer(2),
+    ])
+
+    expect(report.cards.mada).toBe(5605.36)
+    expect(report.cards.visa).toBe(288)
+    expect(report.unread).toEqual([])
+  })
+
+  it('ignores the footer itself: no stray scheme and no date read off it', () => {
+    const report = parseMadaReconciliation([...head(), ...scheme(629, 'mada', 16, '3987.81'), ...footer(1)])
+
+    expect(report.cards.mada).toBe(3987.81)
+    expect(report.unmapped).toEqual([])
+    expect(toISODate(report.terminalDate!)).toBe('2026-09-13')
+  })
+
+  it('drops a header the same way when the address is printed above the receipt', () => {
+    const report = parseMadaReconciliation([
+      at(790, 'https://d.surepay.sa/r', 40),
+      at(790, '10/5/26, 9:03 AM', 40 + 300),
+      ...head(),
+      ...scheme(629, 'mada', 16, '3987.81'),
+    ])
+
+    expect(report.cards.mada).toBe(3987.81)
+  })
+})
+
 describe('mergeReconciliations', () => {
   const slip = (over: Partial<MadaReconciliation> = {}): MadaReconciliation => ({
     terminalDate: null,
