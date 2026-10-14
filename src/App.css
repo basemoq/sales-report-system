@@ -789,6 +789,52 @@ input[type='text']:focus {
   }
 }
 
+/* «تنزيل PDF» in the employee report: that table alone, one light page. */
+.employee-brief {
+  margin: 0.25rem 0 0.75rem;
+  font-weight: 600;
+}
+
+@media print {
+  html[data-print='employees'] body *:not(:has(#employee-report)):not(#employee-report):not(#employee-report *) {
+    display: none !important;
+  }
+
+  html[data-print='employees'] #employee-report .details {
+    display: none !important;
+  }
+
+  html[data-print='employees'] body,
+  html[data-print='employees'] body * {
+    background: transparent;
+    color: #000;
+    box-shadow: none;
+  }
+
+  html[data-print='employees'] .data-table tbody tr:hover {
+    background: transparent;
+  }
+
+  html[data-print='employees'] #employee-report .print-only {
+    display: inline !important;
+  }
+
+  html[data-print='employees'] #employee-report h2 {
+    font-size: 14pt;
+    margin: 0 0 0.25rem;
+  }
+
+  html[data-print='employees'] #employee-report .data-table {
+    width: 100%;
+    font-size: 10pt;
+  }
+
+  html[data-print='employees'] #employee-report .data-table th,
+  html[data-print='employees'] #employee-report .data-table td {
+    padding: 0.3rem 0.5rem;
+  }
+}
+
 /* ---------- upload queue ---------- */
 
 /* Files wait here until the operator says to read them, so several camera

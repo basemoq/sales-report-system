@@ -1,3 +1,4 @@
+import { isNewActivation } from './activations'
 import { summarizeDays, type EmployeeSummary } from './model'
 import type { CacoTransaction } from './sources/caco'
 import { matchKey } from './text'
@@ -36,6 +37,7 @@ export function summarizeEmployees(
         shopId: own[0].shopId,
         total: round2(own.reduce((sum, t) => sum + t.amount, 0)),
         transactions: own.length,
+        activations: own.filter(isNewActivation).length,
         byPaymentMethod,
         days: summarizeDays(own),
       }

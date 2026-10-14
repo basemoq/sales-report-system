@@ -12,6 +12,11 @@ export interface EmployeeSummary {
   shopId: string | null
   total: number
   transactions: number
+  /**
+   * How many of those transactions were new activations (see `isNewActivation`).
+   * Absent on reports saved before it was counted.
+   */
+  activations?: number
   /** Amount settled per payment method, as the export names them. */
   byPaymentMethod: Record<string, number>
   days: DayDetail[]
