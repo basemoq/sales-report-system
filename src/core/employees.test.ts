@@ -21,6 +21,17 @@ const tx = (overrides: Partial<CacoTransaction> = {}): CacoTransaction => ({
 })
 
 describe('summarizeEmployees', () => {
+  it('counts how many of each user transactions were new activations', () => {
+    const summaries = summarizeEmployees([
+      tx({ orderType: 'Setup Fee Prepaid' }),
+      tx({ orderType: 'New Mobile Line - Postpaid 250' }),
+      tx({ orderType: 'Invoice Payment' }),
+      tx({ orderType: 'Top Up' }),
+    ])
+
+    expect(summaries[0]).toMatchObject({ transactions: 4, activations: 2 })
+  })
+
   it('totals each user and counts their transactions', () => {
     const summaries = summarizeEmployees([tx({ amount: 40.25 }), tx({ amount: 10 })])
 

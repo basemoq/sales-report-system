@@ -9,6 +9,18 @@ interface Props {
   reportDate: string
 }
 
+/**
+ * Prints the employee table alone, on one page. The page is otherwise printed
+ * whole — summary, systems and saved reports — so the mode is set on the root
+ * for the print and cleared once the dialog closes.
+ */
+function printEmployees() {
+  const root = document.documentElement
+  root.dataset.print = 'employees'
+  window.addEventListener('afterprint', () => delete root.dataset.print, { once: true })
+  window.print()
+}
+
 export function EmployeesPanel({ employees, reportDate }: Props) {
   const [open, setOpen] = useState<string | null>(null)
 
@@ -27,6 +39,11 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
   }
 
   const total = employees.reduce((sum, employee) => sum + employee.total, 0)
+  const transactions = employees.reduce((sum, employee) => sum + employee.transactions, 0)
+  // Reports saved before activations were counted carry none: show a dash, not a zero.
+  const counted = employees.every((employee) => employee.activations !== undefined)
+  const activations = employees.reduce((sum, employee) => sum + (employee.activations ?? 0), 0)
+  const shopId = employees.find((employee) => employee.shopId)?.shopId ?? null
   const methods = [
     ...new Set(employees.flatMap((employee) => Object.keys(employee.byPaymentMethod))),
   ].sort()
@@ -37,14 +54,21 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
         <h2>
           <Icon name="users" />
           تقرير الموظفين — {reportDate}
+          {shopId && <span className="print-only"> · {shopId}</span>}
         </h2>
-        <button type="button" className="no-print" onClick={() => window.print()}>
+        <button type="button" className="no-print" onClick={printEmployees}>
           تنزيل PDF
         </button>
       </div>
       <p className="muted no-print">
         يفتح نافذة الطباعة؛ اختر «حفظ بصيغة PDF». تُستخدم طباعة المتصفح لأنها الطريقة الوحيدة
-        التي تُخرج النص العربي موصولًا وقابلًا للبحث داخل الملف.
+        التي تُخرج النص العربي موصولًا وقابلًا للبحث داخل الملف. يُطبع جدول الموظفين وحده في
+        صفحة واحدة.
+      </p>
+      <p className="employee-brief">
+        {formatCount(employees.length)} موظفين · {formatCount(transactions)} عملية
+        {counted && <>، منها {formatCount(activations)} تفعيل جديد</>} · الإجمالي{' '}
+        {formatMoney(total)} ريال
       </p>
 
       <div className="table-scroll">
@@ -54,6 +78,7 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
               <th>الموظف</th>
               <th>الإجمالي</th>
               <th>عدد العمليات</th>
+              <th>منها تفعيل جديد</th>
               {methods.map((method) => (
                 <th key={method}>{method}</th>
               ))}
@@ -66,6 +91,9 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
                 <td>{employee.userId}</td>
                 <td className="num">{formatMoney(employee.total)}</td>
                 <td className="num">{formatCount(employee.transactions)}</td>
+                <td className="num">
+                  {employee.activations === undefined ? '—' : formatCount(employee.activations)}
+                </td>
                 {methods.map((method) => (
                   <td key={method} className="num">
                     {formatMoney(employee.byPaymentMethod[method] ?? 0)}
@@ -88,7 +116,16 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
             <tr>
               <th>الإجمالي</th>
               <th className="num">{formatMoney(total)}</th>
-              <th colSpan={methods.length + 2}></th>
+              <th className="num">{formatCount(transactions)}</th>
+              <th className="num">{counted ? formatCount(activations) : '—'}</th>
+              {methods.map((method) => (
+                <th key={method} className="num">
+                  {formatMoney(
+                    employees.reduce((sum, employee) => sum + (employee.byPaymentMethod[method] ?? 0), 0),
+                  )}
+                </th>
+              ))}
+              <th className="no-print"></th>
             </tr>
           </tfoot>
         </table>
