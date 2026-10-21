@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react'
-import { checkCash, requestClosingCash, type ClosingCash } from '../core/closingCash'
+import { Fragment, useEffect, useState } from 'react'
+import {
+  CASH_METHOD,
+  checkCash,
+  requestClosingCash,
+  type CashCheck,
+  type ClosingCash,
+} from '../core/closingCash'
 import type { EmployeeSummary } from '../core/model'
 import { DayDetails } from './DayDetails'
 import { formatCount, formatMoney } from './format'
@@ -26,6 +32,37 @@ function printEmployees() {
 function differenceTone(difference: number): string {
   if (Math.abs(difference) < 0.005) return 'cash-ok'
   return difference < 0 ? 'cash-short' : 'cash-over'
+}
+
+function ClosingHeads() {
+  return (
+    <>
+      <th>كاش الإغلاق</th>
+      <th>الفرق</th>
+    </>
+  )
+}
+
+function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
+  return (
+    <>
+      <td className="num" data-closing-cash={userId}>
+        {check.recorded === null ? 'لا إغلاق' : formatMoney(check.recorded)}
+      </td>
+      <td className={`num ${differenceTone(check.difference)}`} data-cash-diff={userId}>
+        {formatMoney(check.difference)}
+      </td>
+    </>
+  )
+}
+
+function ClosingTotals({ recorded, difference }: { recorded: number; difference: number }) {
+  return (
+    <>
+      <th className="num">{formatMoney(recorded)}</th>
+      <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
+    </>
+  )
 }
 
 export function EmployeesPanel({ employees, reportDate }: Props) {
@@ -75,6 +112,8 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
   const methods = [
     ...new Set(employees.flatMap((employee) => Object.keys(employee.byPaymentMethod))),
   ].sort()
+  // Next to CACO's Cash column, so the two are read side by side; at the end when CACO has no cash.
+  const cashAt = checks ? (methods.includes(CASH_METHOD) ? CASH_METHOD : methods[methods.length - 1] ?? null) : null
 
   return (
     <section className="panel" id="employee-report">
@@ -126,15 +165,13 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
               <th>الإجمالي</th>
               <th>عدد العمليات</th>
               <th>منها تفعيل جديد</th>
+              {checks && cashAt === null && <ClosingHeads />}
               {methods.map((method) => (
-                <th key={method}>{method}</th>
+                <Fragment key={method}>
+                  <th>{method}</th>
+                  {method === cashAt && <ClosingHeads />}
+                </Fragment>
               ))}
-              {checks && (
-                <>
-                  <th>كاش الإغلاق</th>
-                  <th>الفرق</th>
-                </>
-              )}
               <th className="no-print"></th>
             </tr>
           </thead>
@@ -147,24 +184,13 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
                 <td className="num">
                   {employee.activations === undefined ? '—' : formatCount(employee.activations)}
                 </td>
+                {checks && cashAt === null && <ClosingCells userId={employee.userId} check={checks[index]} />}
                 {methods.map((method) => (
-                  <td key={method} className="num">
-                    {formatMoney(employee.byPaymentMethod[method] ?? 0)}
-                  </td>
+                  <Fragment key={method}>
+                    <td className="num">{formatMoney(employee.byPaymentMethod[method] ?? 0)}</td>
+                    {checks && method === cashAt && <ClosingCells userId={employee.userId} check={checks[index]} />}
+                  </Fragment>
                 ))}
-                {checks && (
-                  <>
-                    <td className="num" data-closing-cash={employee.userId}>
-                      {checks[index].recorded === null ? 'لا إغلاق' : formatMoney(checks[index].recorded)}
-                    </td>
-                    <td
-                      className={`num ${differenceTone(checks[index].difference)}`}
-                      data-cash-diff={employee.userId}
-                    >
-                      {formatMoney(checks[index].difference)}
-                    </td>
-                  </>
-                )}
                 <td className="no-print">
                   <button
                     type="button"
@@ -184,19 +210,17 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
               <th className="num">{formatMoney(total)}</th>
               <th className="num">{formatCount(transactions)}</th>
               <th className="num">{counted ? formatCount(activations) : '—'}</th>
+              {checks && cashAt === null && <ClosingTotals recorded={recordedTotal} difference={differenceTotal} />}
               {methods.map((method) => (
-                <th key={method} className="num">
-                  {formatMoney(
-                    employees.reduce((sum, employee) => sum + (employee.byPaymentMethod[method] ?? 0), 0),
-                  )}
-                </th>
+                <Fragment key={method}>
+                  <th className="num">
+                    {formatMoney(
+                      employees.reduce((sum, employee) => sum + (employee.byPaymentMethod[method] ?? 0), 0),
+                    )}
+                  </th>
+                  {method === cashAt && <ClosingTotals recorded={recordedTotal} difference={differenceTotal} />}
+                </Fragment>
               ))}
-              {checks && (
-                <>
-                  <th className="num">{formatMoney(recordedTotal)}</th>
-                  <th className={`num ${differenceTone(differenceTotal)}`}>{formatMoney(differenceTotal)}</th>
-                </>
-              )}
               <th className="no-print"></th>
             </tr>
           </tfoot>
