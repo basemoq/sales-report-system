@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { checkCash, requestClosingCash, type ClosingCash } from '../core/closingCash'
 import type { EmployeeSummary } from '../core/model'
 import { DayDetails } from './DayDetails'
 import { formatCount, formatMoney } from './format'
@@ -21,8 +22,31 @@ function printEmployees() {
   window.print()
 }
 
+/** Shortage red, surplus amber, a match green — the same reading as the shift closing. */
+function differenceTone(difference: number): string {
+  if (Math.abs(difference) < 0.005) return 'cash-ok'
+  return difference < 0 ? 'cash-short' : 'cash-over'
+}
+
 export function EmployeesPanel({ employees, reportDate }: Props) {
   const [open, setOpen] = useState<string | null>(null)
+  const shopId = employees.find((employee) => employee.shopId)?.shopId ?? null
+  const dates = employees.flatMap((employee) => employee.days.map((day) => day.date)).sort()
+  const from = dates[0] ?? reportDate
+  const to = dates[dates.length - 1] ?? reportDate
+  const [closing, setClosing] = useState<{ key: string; cash: ClosingCash | null } | null>(null)
+  const key = `${shopId}|${from}|${to}`
+
+  // The cash recorded at shift closing, from the control center (null standalone).
+  useEffect(() => {
+    let live = true
+    requestClosingCash({ shopId, from, to }).then((cash) => {
+      if (live) setClosing({ key, cash })
+    })
+    return () => {
+      live = false
+    }
+  }, [shopId, from, to, key])
 
   if (employees.length === 0) {
     return (
@@ -43,7 +67,11 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
   // Reports saved before activations were counted carry none: show a dash, not a zero.
   const counted = employees.every((employee) => employee.activations !== undefined)
   const activations = employees.reduce((sum, employee) => sum + (employee.activations ?? 0), 0)
-  const shopId = employees.find((employee) => employee.shopId)?.shopId ?? null
+  const cash = closing && closing.key === key ? closing.cash : null
+  const checks = cash ? employees.map((employee) => checkCash(employee, cash)) : null
+  const recordedTotal = checks ? checks.reduce((sum, check) => sum + (check.recorded ?? 0), 0) : 0
+  const differenceTotal = checks ? checks.reduce((sum, check) => sum + check.difference, 0) : 0
+  const shortages = checks ? checks.filter((check) => check.difference <= -0.005).length : 0
   const methods = [
     ...new Set(employees.flatMap((employee) => Object.keys(employee.byPaymentMethod))),
   ].sort()
@@ -69,7 +97,26 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
         {formatCount(employees.length)} موظفين · {formatCount(transactions)} عملية
         {counted && <>، منها {formatCount(activations)} تفعيل جديد</>} · الإجمالي{' '}
         {formatMoney(total)} ريال
+        {checks && (
+          <>
+            {' · '}
+            <span className={differenceTone(differenceTotal)} data-cash-brief>
+              {shortages > 0
+                ? `عجز كاش عند ${formatCount(shortages)} · الفرق ${formatMoney(differenceTotal)} ريال`
+                : 'الكاش مطابق لإغلاق الشفت'}
+            </span>
+          </>
+        )}
       </p>
+      {cash && (
+        <p className="muted closing-cash-note">
+          «كاش الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» = كاش الإغلاق − Cash في
+          CACO: السالب عجز، والموجب فائض. لا إغلاق = لم يُسجّل شيء.
+          {cash.unmatched.length > 0 && (
+            <> إغلاقات لم تُطابَق بيوزر: {cash.unmatched.join('، ')}.</>
+          )}
+        </p>
+      )}
 
       <div className="table-scroll">
         <table className="data-table">
@@ -82,11 +129,17 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
               {methods.map((method) => (
                 <th key={method}>{method}</th>
               ))}
+              {checks && (
+                <>
+                  <th>كاش الإغلاق</th>
+                  <th>الفرق</th>
+                </>
+              )}
               <th className="no-print"></th>
             </tr>
           </thead>
           <tbody>
-            {employees.map((employee) => (
+            {employees.map((employee, index) => (
               <tr key={employee.userId}>
                 <td>{employee.userId}</td>
                 <td className="num">{formatMoney(employee.total)}</td>
@@ -99,6 +152,19 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
                     {formatMoney(employee.byPaymentMethod[method] ?? 0)}
                   </td>
                 ))}
+                {checks && (
+                  <>
+                    <td className="num" data-closing-cash={employee.userId}>
+                      {checks[index].recorded === null ? 'لا إغلاق' : formatMoney(checks[index].recorded)}
+                    </td>
+                    <td
+                      className={`num ${differenceTone(checks[index].difference)}`}
+                      data-cash-diff={employee.userId}
+                    >
+                      {formatMoney(checks[index].difference)}
+                    </td>
+                  </>
+                )}
                 <td className="no-print">
                   <button
                     type="button"
@@ -125,6 +191,12 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
                   )}
                 </th>
               ))}
+              {checks && (
+                <>
+                  <th className="num">{formatMoney(recordedTotal)}</th>
+                  <th className={`num ${differenceTone(differenceTotal)}`}>{formatMoney(differenceTotal)}</th>
+                </>
+              )}
               <th className="no-print"></th>
             </tr>
           </tfoot>
