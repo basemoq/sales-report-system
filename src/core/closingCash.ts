@@ -8,33 +8,50 @@ import type { EmployeeSummary } from './model'
  */
 export interface ClosingCash {
   /** Keyed by the login (the CACO user id), upper-cased. */
-  byUser: Record<string, { cash: number; closings: number }>
+  byUser: Record<string, { cash: number; span: number | null; closings: number }>
   /** Closings in the range that could not be tied to a login, by the name typed. */
   unmatched: string[]
 }
 
 /** The payment method CACO records cash under. */
 export const CASH_METHOD = 'Cash'
+/** And the card terminal (SPAN) under. */
+export const SPAN_METHOD = 'SPAN Offline'
 
 const REQUEST = 'sales-report:closing-cash?'
 const REPLY = 'sales-report:closing-cash'
 
 export interface CashCheck {
-  /** Cash in CACO for the employee. */
-  caco: number
+  /** Cash and SPAN in CACO for the employee. */
+  cacoCash: number
+  cacoSpan: number
   /** Cash recorded at closing; `null` when no closing was recorded. */
-  recorded: number | null
-  /** Recorded − CACO: below zero is a shortage. No closing counts as nothing recorded. */
+  cash: number | null
+  /** SPAN recorded at closing; `null` when no closing was recorded, or it was not sent. */
+  span: number | null
+  /**
+   * (Closing cash + closing SPAN) − (CACO cash + CACO SPAN): below zero is a
+   * shortage, the same sum the shift closing itself makes. No closing counts as
+   * nothing recorded.
+   */
   difference: number
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100
 
 export function checkCash(employee: EmployeeSummary, closing: ClosingCash): CashCheck {
-  const caco = employee.byPaymentMethod[CASH_METHOD] ?? 0
+  const cacoCash = employee.byPaymentMethod[CASH_METHOD] ?? 0
+  const cacoSpan = employee.byPaymentMethod[SPAN_METHOD] ?? 0
   const entry = closing.byUser[employee.userId.trim().toUpperCase()]
-  const recorded = entry ? round2(entry.cash) : null
-  return { caco, recorded, difference: round2((recorded ?? 0) - caco) }
+  const cash = entry ? round2(entry.cash) : null
+  const span = entry && entry.span !== null ? round2(entry.span) : null
+  return {
+    cacoCash,
+    cacoSpan,
+    cash,
+    span,
+    difference: round2((cash ?? 0) + (span ?? 0) - cacoCash - cacoSpan),
+  }
 }
 
 /** The reply as sent, or `null` when it is not one: a malformed answer shows no columns. */
@@ -45,10 +62,15 @@ export function readReply(data: unknown, id: string): ClosingCash | null | undef
   if (!message.byUser || typeof message.byUser !== 'object') return null
   const byUser: ClosingCash['byUser'] = {}
   for (const [user, value] of Object.entries(message.byUser as Record<string, unknown>)) {
-    const entry = value as { cash?: unknown; closings?: unknown } | null
+    const entry = value as { cash?: unknown; span?: unknown; closings?: unknown } | null
     const cash = Number(entry?.cash)
     if (!Number.isFinite(cash)) continue
-    byUser[user.trim().toUpperCase()] = { cash, closings: Math.max(0, Number(entry?.closings) || 0) }
+    const span = entry?.span === null || entry?.span === undefined ? null : Number(entry.span)
+    byUser[user.trim().toUpperCase()] = {
+      cash,
+      span: span !== null && Number.isFinite(span) ? span : null,
+      closings: Math.max(0, Number(entry?.closings) || 0),
+    }
   }
   const unmatched = Array.isArray(message.unmatched)
     ? message.unmatched.filter((name): name is string => typeof name === 'string').slice(0, 20)
