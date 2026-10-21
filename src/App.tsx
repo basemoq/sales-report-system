@@ -23,9 +23,11 @@ import {
   recordIngestedFiles,
   ReportExistsError,
   saveReport,
+  type StoredReport,
 } from './db/store'
 import { Collapsible } from './ui/Collapsible'
 import { EmployeesPanel } from './ui/EmployeesPanel'
+import { SavedReportView } from './ui/SavedReportView'
 import { FiguresPanel } from './ui/FiguresPanel'
 import { IdentityPanel } from './ui/IdentityPanel'
 import { SavedReportsPanel } from './ui/SavedReportsPanel'
@@ -193,6 +195,8 @@ export default function App() {
     writeStockDraft(stockKey, next)
   }
   const [savedCount, setSavedCount] = useState(0)
+  /** A saved report opened from the list, shown below the day's own. */
+  const [savedView, setSavedView] = useState<StoredReport | null>(null)
 
   /**
    * The header names are asked for once the files are read, not before.
@@ -523,7 +527,12 @@ export default function App() {
         )}
 
         <Collapsible title="التقارير المحفوظة" icon="archive">
-          <SavedReportsPanel refreshToken={savedCount} onDownload={download} />
+          <SavedReportsPanel
+            refreshToken={savedCount}
+            onDownload={download}
+            viewing={savedView?.id ?? null}
+            onView={setSavedView}
+          />
         </Collapsible>
 
         {/*
@@ -537,6 +546,8 @@ export default function App() {
           </button>
         )}
       </section>
+
+      {savedView && <SavedReportView report={savedView} onClose={() => setSavedView(null)} />}
 
       {/* Kept out of .no-print so it carries onto the employee report PDF. */}
       <footer className="credit">© 2026 basem.alawalgy — جميع الحقوق محفوظة</footer>
