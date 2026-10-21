@@ -795,6 +795,19 @@ input[type='text']:focus {
   font-weight: 600;
 }
 
+/* Shift-closing cash against CACO: shortage red, surplus amber, a match green. */
+.cash-short {
+  color: var(--danger);
+  font-weight: 700;
+}
+.cash-over {
+  color: var(--warn);
+  font-weight: 700;
+}
+.cash-ok {
+  color: var(--ok);
+}
+
 @media print {
   html[data-print='employees'] body *:not(:has(#employee-report)):not(#employee-report):not(#employee-report *) {
     display: none !important;
