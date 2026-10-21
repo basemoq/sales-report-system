@@ -14,6 +14,8 @@ import { Icon } from './Icon'
 interface Props {
   employees: readonly EmployeeSummary[]
   reportDate: string
+  /** A saved report shown below the day's own has a panel of its own. */
+  id?: string
 }
 
 /**
@@ -21,10 +23,19 @@ interface Props {
  * whole — summary, systems and saved reports — so the mode is set on the root
  * for the print and cleared once the dialog closes.
  */
-function printEmployees() {
+function printEmployees(panel: HTMLElement | null) {
   const root = document.documentElement
   root.dataset.print = 'employees'
-  window.addEventListener('afterprint', () => delete root.dataset.print, { once: true })
+  // A saved report can be open beside the day's: only the one pressed is printed.
+  panel?.setAttribute('data-print-target', '')
+  window.addEventListener(
+    'afterprint',
+    () => {
+      delete root.dataset.print
+      panel?.removeAttribute('data-print-target')
+    },
+    { once: true },
+  )
   window.print()
 }
 
@@ -65,7 +76,7 @@ function ClosingTotals({ recorded, difference }: { recorded: number; difference:
   )
 }
 
-export function EmployeesPanel({ employees, reportDate }: Props) {
+export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }: Props) {
   const [open, setOpen] = useState<string | null>(null)
   const shopId = employees.find((employee) => employee.shopId)?.shopId ?? null
   const dates = employees.flatMap((employee) => employee.days.map((day) => day.date)).sort()
@@ -116,14 +127,18 @@ export function EmployeesPanel({ employees, reportDate }: Props) {
   const cashAt = checks ? (methods.includes(CASH_METHOD) ? CASH_METHOD : methods[methods.length - 1] ?? null) : null
 
   return (
-    <section className="panel" id="employee-report">
+    <section className="panel employee-report" id={id}>
       <div className="panel-head">
         <h2>
           <Icon name="users" />
           تقرير الموظفين — {reportDate}
           {shopId && <span className="print-only"> · {shopId}</span>}
         </h2>
-        <button type="button" className="no-print" onClick={printEmployees}>
+        <button
+          type="button"
+          className="no-print"
+          onClick={(event) => printEmployees(event.currentTarget.closest('section'))}
+        >
           تنزيل PDF
         </button>
       </div>
