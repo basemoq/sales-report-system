@@ -12,10 +12,11 @@ import type { CacoTransaction } from './sources/caco'
  * - «Setup Fee» on its own         a postpaid line ported in from another operator
  *
  * Not counted: MultiSim (an extra SIM on an existing line), payments, top-ups,
- * renewals, SIM swaps, devices, refunds, and anything superseded or cancelled.
+ * renewals, SIM swaps, devices, refunds, and anything superseded, cancelled or
+ * suspended.
  */
 export function isNewActivation(transaction: CacoTransaction): boolean {
-  if (/superseded|cancel/i.test(transaction.status ?? '')) return false
+  if (/superseded|cancel|suspend/i.test(transaction.status ?? '')) return false
   if (!(transaction.amount > 0)) return false
 
   const raw = transaction.orderType ?? ''

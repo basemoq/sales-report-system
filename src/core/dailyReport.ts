@@ -134,12 +134,19 @@ const NAMED_ORDER_TYPES = new Map<string, keyof BssTotals | null>([
 ])
 
 const REFUND = matchKey('Refund')
-const VOIDED_STATUSES = new Set([matchKey('Superseded'), matchKey('Cancelled')])
+const VOIDED_STATUSES = new Set([
+  matchKey('Superseded'),
+  matchKey('Cancelled'),
+  matchKey('Suspended'),
+])
 
 /**
- * A sales order the BSS replaced (`Superseded`) or called off (`Cancelled`)
- * rather than completed. The row stays in the export at its full amount, so it
- * is in both CACO totals whether or not the customer ever paid it.
+ * A sales order the BSS replaced (`Superseded`), called off (`Cancelled`) or
+ * suspended (`Suspended`) rather than completed. The row stays in the export at
+ * its full amount, so it is in both CACO totals whether or not the customer ever
+ * paid it. `Suspended` was seen on a real day (18 October 2026): a 97.01 prepaid
+ * SIM the system cancelled, while two 105.01 orders the same day were marked
+ * `Superseded` — the showroom counted all three as cancelled.
  */
 const isVoided = (transaction: CacoTransaction): boolean =>
   VOIDED_STATUSES.has(matchKey((transaction.status ?? '').trim()))

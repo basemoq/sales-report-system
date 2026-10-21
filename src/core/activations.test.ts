@@ -45,9 +45,10 @@ describe('isNewActivation', () => {
     expect(isNewActivation(tx({ orderType }))).toBe(false)
   })
 
-  it('does not count a superseded or cancelled line', () => {
+  it('does not count a superseded, cancelled or suspended line', () => {
     expect(isNewActivation(tx({ status: 'Superseded' }))).toBe(false)
     expect(isNewActivation(tx({ status: 'Cancelled' }))).toBe(false)
+    expect(isNewActivation(tx({ status: 'Suspended' }))).toBe(false)
   })
 
   it('does not count a zero or negative amount', () => {

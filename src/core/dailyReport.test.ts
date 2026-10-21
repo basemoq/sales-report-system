@@ -536,6 +536,36 @@ describe('refunds against a superseded sale', () => {
     expect(report.warnings[0]).toContain('2820.00')
   })
 
+  it('treats a Suspended order like a superseded one: out of the figures, and named', () => {
+    // 18 October 2026: a 97.01 prepaid SIM the system cancelled came out
+    // `Suspended`, not `Superseded`, and was counted as a sale.
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({
+            orderType: 'Setup Fee Prepaid',
+            amount: 97.01,
+            msisdn: '966500000001',
+            salesOrderNumber: '1721997631',
+            status: 'Suspended',
+          }),
+          row({ orderType: 'Setup Fee Prepaid', amount: 50, msisdn: '966500000002', status: 'Processed' }),
+        ],
+      },
+    }
+
+    expect(buildDailyFigures(sources).bss.ordering).toBe(50)
+    const report = exclusionReport(sources)
+    expect(report.supersededExcluded).toBe(97.01)
+    expect(report.warnings[0]).toContain('Suspended')
+    expect(report.warnings[0]).toContain('1721997631')
+  })
+
   it('leaves a superseded order alone when a refund already reverses it', () => {
     const sources = {
       detailed: withRefund(
