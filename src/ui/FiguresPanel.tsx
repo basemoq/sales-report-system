@@ -30,6 +30,8 @@ interface Props {
   onEnterCard: (card: keyof CardTotals, value: string) => void
   /** The day's photographs, to read a figure off when the scan could not. */
   receiptImages: readonly UploadedFile[]
+  /** A saved report, shown again: its figures are as they were saved, so nothing is typed over. */
+  readOnly?: boolean
 }
 
 /**
@@ -71,6 +73,7 @@ export function FiguresPanel({
   enteredCards,
   onEnterCard,
   receiptImages,
+  readOnly = false,
 }: Props) {
   const photos = useImageUrls(receiptImages)
 
@@ -89,7 +92,7 @@ export function FiguresPanel({
   ]
 
   return (
-    <section className="panel" id="figures">
+    <section className="panel" id={readOnly ? undefined : 'figures'}>
       <h2>
         <Icon name="report" />
         التحقق من الأرقام — {reportDate}
@@ -180,21 +183,25 @@ export function FiguresPanel({
                       * Printed as a plain number, since a box to type in means
                       * nothing on paper.
                       */}
-                    <input
-                      className={
-                        entered.has(card) ? 'cell-input is-entered no-print' : 'cell-input no-print'
-                      }
-                      type="text"
-                      inputMode="decimal"
-                      aria-label={label}
-                      placeholder="0.00"
-                      value={
-                        enteredCards[card] ??
-                        (figures.cards[card] === 0 ? '' : formatMoney(figures.cards[card]))
-                      }
-                      onChange={(event) => onEnterCard(card, event.target.value)}
-                    />
-                    <span className="print-only">{formatMoney(figures.cards[card])}</span>
+                    {readOnly ? (
+                      <span>{formatMoney(figures.cards[card])}</span>
+                    ) : (
+                      <input
+                        className={
+                          entered.has(card) ? 'cell-input is-entered no-print' : 'cell-input no-print'
+                        }
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={label}
+                        placeholder="0.00"
+                        value={
+                          enteredCards[card] ??
+                          (figures.cards[card] === 0 ? '' : formatMoney(figures.cards[card]))
+                        }
+                        onChange={(event) => onEnterCard(card, event.target.value)}
+                      />
+                    )}
+                    {!readOnly && <span className="print-only">{formatMoney(figures.cards[card])}</span>}
                   </td>
                 ))}
               </tr>

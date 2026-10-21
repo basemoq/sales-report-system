@@ -809,11 +809,11 @@ input[type='text']:focus {
 }
 
 @media print {
-  html[data-print='employees'] body *:not(:has(#employee-report)):not(#employee-report):not(#employee-report *) {
+  html[data-print='employees'] body *:not(:has([data-print-target])):not([data-print-target]):not([data-print-target] *) {
     display: none !important;
   }
 
-  html[data-print='employees'] #employee-report .details {
+  html[data-print='employees'] [data-print-target] .details {
     display: none !important;
   }
 
@@ -844,8 +844,8 @@ input[type='text']:focus {
     box-shadow: none !important;
   }
 
-  html[data-print='employees'] #employee-report .data-table thead th,
-  html[data-print='employees'] #employee-report .data-table tfoot th {
+  html[data-print='employees'] [data-print-target] .data-table thead th,
+  html[data-print='employees'] [data-print-target] .data-table tfoot th {
     background: #eee !important;
   }
 
@@ -853,22 +853,22 @@ input[type='text']:focus {
     background: transparent;
   }
 
-  html[data-print='employees'] #employee-report .print-only {
+  html[data-print='employees'] [data-print-target] .print-only {
     display: inline !important;
   }
 
-  html[data-print='employees'] #employee-report h2 {
+  html[data-print='employees'] [data-print-target] h2 {
     font-size: 14pt;
     margin: 0 0 0.25rem;
   }
 
-  html[data-print='employees'] #employee-report .data-table {
+  html[data-print='employees'] [data-print-target] .data-table {
     width: 100%;
     font-size: 10pt;
   }
 
-  html[data-print='employees'] #employee-report .data-table th,
-  html[data-print='employees'] #employee-report .data-table td {
+  html[data-print='employees'] [data-print-target] .data-table th,
+  html[data-print='employees'] [data-print-target] .data-table td {
     padding: 0.3rem 0.5rem;
   }
 }
@@ -1689,4 +1689,18 @@ details[open] > summary .collapsible-arrow {
   .stock-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ---------- a saved report, opened again ---------- */
+
+.saved-view {
+  margin-top: 1rem;
+}
+
+.saved-view-head h2 {
+  margin-bottom: 0.25rem;
+}
+
+.saved-view-head p {
+  margin: 0 0 0.75rem;
 }
