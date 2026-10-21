@@ -808,6 +808,15 @@ input[type='text']:focus {
   color: var(--ok);
 }
 
+/* The shift closing's own columns, set apart from CACO's beside them. */
+.data-table .closing-col {
+  background: color-mix(in srgb, var(--ok) 9%, transparent);
+}
+.data-table thead .closing-col,
+.data-table tfoot .closing-col {
+  background: color-mix(in srgb, var(--ok) 16%, var(--head, transparent));
+}
+
 @media print {
   html[data-print='employees'] body *:not(:has([data-print-target])):not([data-print-target]):not([data-print-target] *) {
     display: none !important;
@@ -851,6 +860,10 @@ input[type='text']:focus {
 
   html[data-print='employees'] .data-table tbody tr:hover {
     background: transparent;
+  }
+
+  html[data-print='employees'] [data-print-target] .closing-col {
+    background: #eaf4ee !important;
   }
 
   html[data-print='employees'] [data-print-target] .print-only {

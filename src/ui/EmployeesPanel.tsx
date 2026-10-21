@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CASH_METHOD,
+  SPAN_METHOD,
   checkCash,
   requestClosingCash,
   type CashCheck,
@@ -45,10 +46,17 @@ function differenceTone(difference: number): string {
   return difference < 0 ? 'cash-short' : 'cash-over'
 }
 
+/** CACO's own columns lead with the two the shift closing is checked against, named as such. */
+const METHOD_LABELS: Record<string, string> = {
+  [CASH_METHOD]: 'كاش الكاكو',
+  [SPAN_METHOD]: 'اسبان الكاكو',
+}
+
 function ClosingHeads() {
   return (
     <>
-      <th>كاش الإغلاق</th>
+      <th className="closing-col">كاش الإغلاق</th>
+      <th className="closing-col">اسبان الإغلاق</th>
       <th>الفرق</th>
     </>
   )
@@ -57,8 +65,11 @@ function ClosingHeads() {
 function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
   return (
     <>
-      <td className="num" data-closing-cash={userId}>
-        {check.recorded === null ? 'لا إغلاق' : formatMoney(check.recorded)}
+      <td className="num closing-col" data-closing-cash={userId}>
+        {check.cash === null ? 'لا إغلاق' : formatMoney(check.cash)}
+      </td>
+      <td className="num closing-col" data-closing-span={userId}>
+        {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
       </td>
       <td className={`num ${differenceTone(check.difference)}`} data-cash-diff={userId}>
         {formatMoney(check.difference)}
@@ -67,10 +78,14 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
   )
 }
 
-function ClosingTotals({ recorded, difference }: { recorded: number; difference: number }) {
+function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
+  const sum = (pick: (check: CashCheck) => number | null) =>
+    checks.reduce((total, check) => total + (pick(check) ?? 0), 0)
+  const difference = sum((check) => check.difference)
   return (
     <>
-      <th className="num">{formatMoney(recorded)}</th>
+      <th className="num closing-col">{formatMoney(sum((check) => check.cash))}</th>
+      <th className="num closing-col">{formatMoney(sum((check) => check.span))}</th>
       <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
     </>
   )
@@ -117,14 +132,12 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
   const activations = employees.reduce((sum, employee) => sum + (employee.activations ?? 0), 0)
   const cash = closing && closing.key === key ? closing.cash : null
   const checks = cash ? employees.map((employee) => checkCash(employee, cash)) : null
-  const recordedTotal = checks ? checks.reduce((sum, check) => sum + (check.recorded ?? 0), 0) : 0
   const differenceTotal = checks ? checks.reduce((sum, check) => sum + check.difference, 0) : 0
   const shortages = checks ? checks.filter((check) => check.difference <= -0.005).length : 0
-  const methods = [
-    ...new Set(employees.flatMap((employee) => Object.keys(employee.byPaymentMethod))),
-  ].sort()
-  // Next to CACO's Cash column, so the two are read side by side; at the end when CACO has no cash.
-  const cashAt = checks ? (methods.includes(CASH_METHOD) ? CASH_METHOD : methods[methods.length - 1] ?? null) : null
+  // CACO's cash and SPAN first, then any other method; the closing's own columns come after them all.
+  const found = [...new Set(employees.flatMap((employee) => Object.keys(employee.byPaymentMethod)))]
+  const lead = [CASH_METHOD, SPAN_METHOD].filter((method) => found.includes(method))
+  const methods = [...lead, ...found.filter((method) => !lead.includes(method)).sort()]
 
   return (
     <section className="panel employee-report" id={id}>
@@ -156,7 +169,7 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
             {' · '}
             <span className={differenceTone(differenceTotal)} data-cash-brief>
               {shortages > 0
-                ? `عجز كاش عند ${formatCount(shortages)} · الفرق ${formatMoney(differenceTotal)} ريال`
+                ? `عجز عند ${formatCount(shortages)} · الفرق ${formatMoney(differenceTotal)} ريال`
                 : 'الكاش مطابق لإغلاق الشفت'}
             </span>
           </>
@@ -164,8 +177,9 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
       </p>
       {cash && (
         <p className="muted closing-cash-note">
-          «كاش الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» = كاش الإغلاق − Cash في
-          CACO: السالب عجز، والموجب فائض. لا إغلاق = لم يُسجّل شيء.
+          «كاش الإغلاق» و«اسبان الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» =
+          (كاش الإغلاق + اسبان الإغلاق) − (كاش الكاكو + اسبان الكاكو): السالب عجز، والموجب فائض.
+          لا إغلاق = لم يُسجّل شيء.
           {cash.unmatched.length > 0 && (
             <> إغلاقات لم تُطابَق بيوزر: {cash.unmatched.join('، ')}.</>
           )}
@@ -180,13 +194,10 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
               <th>الإجمالي</th>
               <th>عدد العمليات</th>
               <th>منها تفعيل جديد</th>
-              {checks && cashAt === null && <ClosingHeads />}
               {methods.map((method) => (
-                <Fragment key={method}>
-                  <th>{method}</th>
-                  {method === cashAt && <ClosingHeads />}
-                </Fragment>
+                <th key={method}>{METHOD_LABELS[method] ?? method}</th>
               ))}
+              {checks && <ClosingHeads />}
               <th className="no-print"></th>
             </tr>
           </thead>
@@ -199,13 +210,12 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
                 <td className="num">
                   {employee.activations === undefined ? '—' : formatCount(employee.activations)}
                 </td>
-                {checks && cashAt === null && <ClosingCells userId={employee.userId} check={checks[index]} />}
                 {methods.map((method) => (
-                  <Fragment key={method}>
-                    <td className="num">{formatMoney(employee.byPaymentMethod[method] ?? 0)}</td>
-                    {checks && method === cashAt && <ClosingCells userId={employee.userId} check={checks[index]} />}
-                  </Fragment>
+                  <td key={method} className="num">
+                    {formatMoney(employee.byPaymentMethod[method] ?? 0)}
+                  </td>
                 ))}
+                {checks && <ClosingCells userId={employee.userId} check={checks[index]} />}
                 <td className="no-print">
                   <button
                     type="button"
@@ -225,17 +235,14 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
               <th className="num">{formatMoney(total)}</th>
               <th className="num">{formatCount(transactions)}</th>
               <th className="num">{counted ? formatCount(activations) : '—'}</th>
-              {checks && cashAt === null && <ClosingTotals recorded={recordedTotal} difference={differenceTotal} />}
               {methods.map((method) => (
-                <Fragment key={method}>
-                  <th className="num">
-                    {formatMoney(
-                      employees.reduce((sum, employee) => sum + (employee.byPaymentMethod[method] ?? 0), 0),
-                    )}
-                  </th>
-                  {method === cashAt && <ClosingTotals recorded={recordedTotal} difference={differenceTotal} />}
-                </Fragment>
+                <th key={method} className="num">
+                  {formatMoney(
+                    employees.reduce((sum, employee) => sum + (employee.byPaymentMethod[method] ?? 0), 0),
+                  )}
+                </th>
               ))}
+              {checks && <ClosingTotals checks={checks} />}
               <th className="no-print"></th>
             </tr>
           </tfoot>
