@@ -536,6 +536,55 @@ describe('refunds against a superseded sale', () => {
     expect(report.warnings[0]).toContain('2820.00')
   })
 
+  it('ties a refund a halala off its cancelled order on the same line, as CACO does', () => {
+    // The shape from 22 October 2026: a prepaid SIM rung at 10:02 went
+    // Superseded, was rung again at 10:06 and processed, and the first was
+    // refunded at 4:58 PM as 50.26 — a halala over. CACO's own total nets all
+    // three; so must the report, with no warning for an order that was settled.
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      msisdn: '966500000101',
+      account: '1000000101',
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({ orderType: 'Setup Fee Prepaid', amount: 50.25, time: '10:02 AM', salesOrderNumber: '1000000901', status: 'Superseded' }),
+          row({ orderType: 'Setup Fee Prepaid', amount: 50.25, time: '10:06 AM', salesOrderNumber: '1000000902', status: 'Processed' }),
+          row({ orderType: 'Refund', amount: -50.26, time: '4:58 PM', salesOrderNumber: null, status: null }),
+        ],
+      },
+    }
+
+    const [match] = matchRefunds(sources.detailed)
+    expect(match.reversed?.salesOrderNumber).toBe('1000000901')
+    expect(buildDailyFigures(sources).bss.ordering).toBe(50.24)
+    expect(refundSummary(sources).unplaced).toEqual([])
+    expect(exclusionReport(sources)).toEqual({ supersededExcluded: 0, warnings: [] })
+  })
+
+  it('does not tie a refund to a sale more than a few halalas away', () => {
+    const row = (over: Partial<CacoTransaction>): CacoTransaction => ({
+      ...detailed([['x', 0]]).transactions[0],
+      msisdn: '966500000101',
+      ...over,
+    })
+    const sources = {
+      detailed: {
+        ...detailed([]),
+        transactions: [
+          row({ orderType: 'Setup Fee Prepaid', amount: 50.25, salesOrderNumber: '1000000901', status: 'Superseded' }),
+          row({ orderType: 'Refund', amount: -50.5, salesOrderNumber: null, status: null }),
+        ],
+      },
+    }
+
+    expect(matchRefunds(sources.detailed)[0].reversed).toBeNull()
+    expect(refundSummary(sources).unplaced).toHaveLength(1)
+  })
+
   it('treats a Suspended order like a superseded one: out of the figures, and named', () => {
     // 18 October 2026: a 97.01 prepaid SIM the system cancelled came out
     // `Suspended`, not `Superseded`, and was counted as a sale.

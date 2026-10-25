@@ -912,6 +912,19 @@ input[type='text']:focus {
   overflow-wrap: anywhere;
 }
 
+/* A file turned away as already entered, let through on purpose: beside «remove», in the warning tone. */
+.queue-use {
+  min-height: 2rem;
+  margin-inline-end: 0.5rem;
+  padding: 0 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .queue-remove {
   min-height: 2rem;
   padding: 0 0.6rem;
