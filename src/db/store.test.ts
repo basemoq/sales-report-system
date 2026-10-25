@@ -1,6 +1,7 @@
 // Installs IDBRequest and friends as globals, which `idb` reaches for directly.
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
+import { openDB } from 'idb'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   deleteReport,
@@ -8,9 +9,11 @@ import {
   getIngestedHashes,
   getReport,
   listReportsInPeriod,
+  loadQueue,
   recordIngestedFiles,
   ReportExistsError,
   resetDBHandle,
+  saveQueue,
   saveReport,
   type StoredReport,
 } from './store'
@@ -102,3 +105,40 @@ describe('reports', () => {
   })
 })
 
+describe('the pinned upload list', () => {
+  const bytes = (n: number) => new Uint8Array([n, n + 1, n + 2]).buffer
+
+  it('comes back as it was pinned, bytes and all', async () => {
+    await saveQueue([
+      { fileName: '22.pdf', bytes: bytes(22) },
+      { fileName: '23.pdf', bytes: bytes(23) },
+    ])
+    resetDBHandle()
+    const back = await loadQueue()
+    expect(back.map((file) => file.fileName)).toEqual(['22.pdf', '23.pdf'])
+    expect([...new Uint8Array(back[1].bytes)]).toEqual([23, 24, 25])
+  })
+
+  it('is unpinned by an empty list', async () => {
+    await saveQueue([{ fileName: '22.pdf', bytes: bytes(22) }])
+    await saveQueue([])
+    expect(await loadQueue()).toEqual([])
+  })
+
+  it('arrives on a device that already has reports, and keeps them', async () => {
+    // A phone that opened the report before the list was kept: version 1.
+    const v1 = await openDB('sales-report-system', 1, {
+      upgrade(db) {
+        db.createObjectStore('reports', { keyPath: 'id' }).createIndex('periodKey', 'periodKey')
+        db.createObjectStore('ingestedFiles', { keyPath: 'hash' }).createIndex('reportId', 'reportId')
+      },
+    })
+    await v1.put('reports', report('2026-10-23'))
+    v1.close()
+    resetDBHandle()
+
+    expect(await getReport('2026-10-23')).toBeDefined()
+    await saveQueue([{ fileName: '24.pdf', bytes: bytes(24) }])
+    expect((await loadQueue()).map((file) => file.fileName)).toEqual(['24.pdf'])
+  })
+})

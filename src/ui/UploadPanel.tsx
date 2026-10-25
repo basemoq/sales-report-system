@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { DuplicateHit } from '../core/dedupe'
 import {
   buildDailyReport,
@@ -9,7 +9,7 @@ import {
 } from '../core/pipeline'
 import { readCodeFromImage } from '../core/scan'
 import type { CacoTransaction } from '../core/sources/caco'
-import { getIngestedFiles } from '../db/store'
+import { getIngestedFiles, loadQueue, saveQueue } from '../db/store'
 import { ReceiptCode } from './ReceiptCode'
 import { WarningsBubble } from './WarningsBubble'
 import { Icon, type IconName } from './Icon'
@@ -123,6 +123,8 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
    * it, and the build throws when it has none.
    */
   const [code, setCode] = useState<{ code: string; payload: string | null } | null>(null)
+  /** How many pinned files came back from an earlier visit, for the note above the list. */
+  const [restored, setRestored] = useState<number | null>(null)
 
   // The run reads the files from here rather than from state: a shot picked
   // while the previous run is still going must be in the batch that follows,
@@ -208,9 +210,42 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
     }
   }
 
+  // The list pinned on this device comes back after the app was left and
+  // reopened — the trip out to a receipt's page and back.
+  useEffect(() => {
+    let live = true
+    loadQueue()
+      .then((saved) => {
+        if (!live || saved.length === 0 || files.current.length > 0) return
+        files.current = saved
+        setQueued(saved)
+        setRestored(saved.length)
+        scanCodes(saved)
+        void build()
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+    // Once, on opening: a later list is the user's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** The code on a photograph, read while the report is built: it matters even with no figures. */
+  function scanCodes(list: readonly UploadedFile[]) {
+    for (const file of list) {
+      if (!/\.(png|jpe?g|heic|heif|webp|gif|bmp)$/i.test(file.fileName)) continue
+      void readCodeFromImage(file.bytes).then((found) => {
+        if (found !== null) setCode(found)
+      })
+    }
+  }
+
   function setFiles(next: UploadedFile[]) {
     files.current = next
     setQueued(next)
+    void saveQueue(next).catch(() => {})
+    if (next.length === 0) setRestored(null)
     // The code belongs to the pictures that are there; emptying the list takes
     // it with them.
     if (next.length === 0) {
@@ -233,12 +268,7 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
 
     // Looked for while the report is being built rather than after it, since
     // the build can end with nothing to report and the code still matters.
-    for (const file of added) {
-      if (!/\.(png|jpe?g|heic|heif|webp|gif|bmp)$/i.test(file.fileName)) continue
-      void readCodeFromImage(file.bytes).then((found) => {
-        if (found !== null) setCode(found)
-      })
-    }
+    scanCodes(added)
   }
 
   const read = outcome.files.filter((file) => file.ok)
@@ -292,6 +322,11 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
             <Icon name="document" />
             الملفات المرفوعة ({queued.length})
           </h3>
+          <p className="muted queue-pinned" data-queue-pinned>
+            {restored !== null && <strong>أُعيدت {restored} ملفات مثبّتة من قبل. </strong>}
+            الملفات مثبّتة في هذا الجهاز حتى «إفراغ القائمة»، وتبقى إن خرجت لفتح إيصال مدى ورجعت: صوّر
+            باركود كل يوم وأضف ملفه، ثم ارفع CACO وابنِ التقرير مرة واحدة.
+          </p>
 
           {/*
             * One row per file: what it is called, how big it is, what the app
