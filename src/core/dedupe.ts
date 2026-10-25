@@ -9,6 +9,8 @@ export interface DuplicateHit<T extends HashedFile> {
   reason: 'already-stored' | 'repeated-in-upload'
   /** Name the file carried the first time these bytes were seen. */
   firstSeenAs: string
+  /** For `already-stored`: the saved report the bytes went into, when known. */
+  storedIn?: string
 }
 
 export interface DedupeResult<T extends HashedFile> {
@@ -24,6 +26,7 @@ export interface DedupeResult<T extends HashedFile> {
 export function deduplicateByHash<T extends HashedFile>(
   files: T[],
   storedHashes: ReadonlyMap<string, string> = new Map(),
+  storedIn: ReadonlyMap<string, string> = new Map(),
 ): DedupeResult<T> {
   const unique: T[] = []
   const duplicates: DuplicateHit<T>[] = []
@@ -32,7 +35,13 @@ export function deduplicateByHash<T extends HashedFile>(
   for (const file of files) {
     const storedAs = storedHashes.get(file.hash)
     if (storedAs !== undefined) {
-      duplicates.push({ file, reason: 'already-stored', firstSeenAs: storedAs })
+      const report = storedIn.get(file.hash)
+      duplicates.push({
+        file,
+        reason: 'already-stored',
+        firstSeenAs: storedAs,
+        ...(report ? { storedIn: report } : {}),
+      })
       continue
     }
     const seenAs = seen.get(file.hash)

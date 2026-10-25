@@ -35,6 +35,19 @@ describe('deduplicateByHash', () => {
     ])
   })
 
+  it('names the saved report a stored file went into, when it is known', () => {
+    const reupload = file('23.pdf', 'stored')
+    const { duplicates } = deduplicateByHash(
+      [reupload],
+      new Map([['stored', '23.pdf']]),
+      new Map([['stored', 'WFW430-2026-10-23']]),
+    )
+
+    expect(duplicates).toEqual([
+      { file: reupload, reason: 'already-stored', firstSeenAs: '23.pdf', storedIn: 'WFW430-2026-10-23' },
+    ])
+  })
+
   it('processes the unique files in a batch that also contains duplicates', () => {
     const fresh = file('new.xlsx', 'fresh')
     const { unique, duplicates } = deduplicateByHash(

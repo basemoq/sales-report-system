@@ -4,6 +4,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   deleteReport,
+  getIngestedFiles,
   getIngestedHashes,
   getReport,
   listReportsInPeriod,
@@ -68,6 +69,16 @@ describe('reports', () => {
 
     await saveReport(report('2025-04-30'), { overwrite: true })
     expect(await getIngestedHashes()).toEqual(new Map([['h1', 'march.xlsx']]))
+  })
+
+  it('says which saved report each ingested file went into', async () => {
+    await saveReport(report('WFW430-2026-10-23'))
+    await recordIngestedFiles([
+      { hash: 'h23', fileName: '23.pdf', ingestedAt: 'now', reportId: 'WFW430-2026-10-23' },
+    ])
+    expect(await getIngestedFiles()).toEqual(
+      new Map([['h23', { fileName: '23.pdf', reportId: 'WFW430-2026-10-23' }]]),
+    )
   })
 
   it('groups reports by period', async () => {

@@ -119,6 +119,13 @@ export async function getIngestedHashes(): Promise<Map<string, string>> {
   return new Map(files.map((file) => [file.hash, file.fileName]))
 }
 
+/** Hash → the name it was first ingested under and the saved report it went into. */
+export async function getIngestedFiles(): Promise<Map<string, { fileName: string; reportId: string }>> {
+  const db = await getDB()
+  const files = await db.getAll('ingestedFiles')
+  return new Map(files.map((file) => [file.hash, { fileName: file.fileName, reportId: file.reportId }]))
+}
+
 export async function recordIngestedFiles(files: IngestedFile[]): Promise<void> {
   const db = await getDB()
   const tx = db.transaction('ingestedFiles', 'readwrite')

@@ -161,12 +161,22 @@ function bucketOf(transaction: CacoTransaction): keyof BssTotals | null {
 const isRefund = (transaction: CacoTransaction): boolean =>
   matchKey((transaction.orderType ?? '').trim()) === REFUND
 
-/** Same line, same money: how a refund is tied to the sale it reverses. */
+/**
+ * How far a refund may sit from the sale it reverses, on the same line. A real
+ * pull (22 October 2026) refunded a cancelled 50.25 prepaid SIM as 50.26: the
+ * same line, a halala apart. Matched to the halala, the refund was left
+ * unplaced and the cancelled order excluded on its own, so the day came out a
+ * halala off CACO's total and carried two warnings for one settled order.
+ * A few halalas covers the rounding; anything wider is a different amount.
+ */
+export const REFUND_TOLERANCE = 0.05
+
+/** Same line, (nearly) the same money: how a refund is tied to the sale it reverses. */
 function reverses(refund: CacoTransaction, sale: CacoTransaction): boolean {
   const sameLine =
     (refund.msisdn !== null && refund.msisdn === sale.msisdn) ||
     (refund.account !== null && refund.account === sale.account)
-  return sameLine && Math.abs(Math.abs(refund.amount) - sale.amount) < 0.005
+  return sameLine && Math.abs(Math.abs(refund.amount) - sale.amount) <= REFUND_TOLERANCE + 1e-9
 }
 
 export interface RefundMatch {

@@ -1,13 +1,15 @@
 import { useRef, useState, type ChangeEvent } from 'react'
+import type { DuplicateHit } from '../core/dedupe'
 import {
   buildDailyReport,
+  NoDataError,
   type DailyReportBuild,
   type SourceKind,
   type UploadedFile,
 } from '../core/pipeline'
 import { readCodeFromImage } from '../core/scan'
 import type { CacoTransaction } from '../core/sources/caco'
-import { getIngestedHashes } from '../db/store'
+import { getIngestedFiles } from '../db/store'
 import { ReceiptCode } from './ReceiptCode'
 import { WarningsBubble } from './WarningsBubble'
 import { Icon, type IconName } from './Icon'
@@ -50,6 +52,38 @@ interface FileOutcome {
   /** Green when it was read, orange when it was not. */
   ok: boolean
   status: string
+  /** A file turned away as already entered in a saved report: its hash, to let it through. */
+  useAnyway?: string
+}
+
+/** «التقرير المحفوظ ليوم 2026-10-23 (WFW430)» from a stored report id (shop-date, or date alone). */
+function storedLabel(reportId: string | undefined): string {
+  const match = /^(?:(.+)-)?(\d{4}-\d{2}-\d{2})$/.exec(reportId ?? '')
+  if (!match) return 'تقرير محفوظ'
+  return `التقرير المحفوظ ليوم ${match[2]}${match[1] ? ` (${match[1]})` : ''}`
+}
+
+/**
+ * The row for a file whose bytes were seen before. One already in a saved
+ * report names that report, so it is clear whether it is the same day entered
+ * twice or a day's receipt that is wanted again.
+ */
+function duplicateOutcome(hit: DuplicateHit<{ hash: string; fileName: string }>): FileOutcome {
+  if (hit.reason === 'repeated-in-upload') {
+    return {
+      fileName: hit.file.fileName,
+      kind: '—',
+      ok: false,
+      status: `مكرر — نفس محتوى «${hit.firstSeenAs}» المرفوع في نفس الدفعة`,
+    }
+  }
+  return {
+    fileName: hit.file.fileName,
+    kind: '—',
+    ok: false,
+    status: `مكرر — دخل في ${storedLabel(hit.storedIn)} باسم «${hit.firstSeenAs}». إن كان مقصودًا فاستخدمه رغم ذلك، وإلا أزله.`,
+    useAnyway: hit.file.hash,
+  }
 }
 
 /** A file the run never reported on, because the run itself failed. */
@@ -94,6 +128,8 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
   // while the previous run is still going must be in the batch that follows,
   // and a state update would not have landed yet.
   const files = useRef<UploadedFile[]>([])
+  /** Files let through although a saved report already holds them, by hash. */
+  const allowed = useRef<Set<string>>(new Set())
   const running = useRef(false)
   const again = useRef(false)
 
@@ -127,7 +163,14 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
     if (batch.length === 0) return
 
     try {
-      const report = await buildDailyReport([...batch], await getIngestedHashes())
+      const names = new Map<string, string>()
+      const reports = new Map<string, string>()
+      for (const [hash, stored] of await getIngestedFiles()) {
+        if (allowed.current.has(hash)) continue
+        names.set(hash, stored.fileName)
+        reports.set(hash, stored.reportId)
+      }
+      const report = await buildDailyReport([...batch], names, reports)
 
       setOutcome({
         files: [
@@ -137,14 +180,7 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
             ok: true,
             status: 'قُرئ',
           })),
-          ...report.duplicates.map((hit) => ({
-            fileName: hit.file.fileName,
-            kind: '—',
-            ok: false,
-            status: `مكرر — نفس محتوى «${hit.firstSeenAs}» ${
-              hit.reason === 'already-stored' ? 'المُدخل سابقًا' : 'المرفوع في نفس الدفعة'
-            }`,
-          })),
+          ...report.duplicates.map(duplicateOutcome),
           ...report.unrecognised.map((file) => ({
             fileName: file.fileName,
             kind: '—',
@@ -159,9 +195,13 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
     } catch (cause) {
       setError((cause as Error).message)
       // Without this every row keeps saying it is being read, while the message
-      // underneath says the reading is over.
+      // underneath says the reading is over. Files turned away as duplicates
+      // still say so, with their way through.
+      const turnedAway = cause instanceof NoDataError ? cause.duplicates.map(duplicateOutcome) : []
+      const named = new Set(turnedAway.map((row) => row.fileName))
+      const failed = batch.filter((file) => !named.has(file.fileName))
       setOutcome({
-        files: batch.map((file) => failedOutcome(file.fileName)),
+        files: [...turnedAway, ...failed.map((file) => failedOutcome(file.fileName))],
         missing: [],
         warnings: [],
       })
@@ -173,7 +213,10 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
     setQueued(next)
     // The code belongs to the pictures that are there; emptying the list takes
     // it with them.
-    if (next.length === 0) setCode(null)
+    if (next.length === 0) {
+      setCode(null)
+      allowed.current.clear()
+    }
     void build()
   }
 
@@ -294,6 +337,27 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
                         </p>
                       )}
                       <p>{outcome === undefined ? 'في انتظار القراءة.' : outcome.status}</p>
+                      {outcome?.useAnyway !== undefined && (
+                        <button
+                          type="button"
+                          className="queue-use"
+                          disabled={busy}
+                          data-use-anyway={file.fileName}
+                          onClick={() => {
+                            const hash = outcome.useAnyway
+                            if (hash === undefined) return
+                            const sure = window.confirm(
+                              'سيُقرأ هذا الملف ويدخل في هذا التقرير وهو داخلٌ في تقرير محفوظ آخر. ' +
+                                'استخدمه فقط إن كان التقريران ليومين مختلفين. متأكد؟',
+                            )
+                            if (!sure) return
+                            allowed.current.add(hash)
+                            void build()
+                          }}
+                        >
+                          استخدمه رغم ذلك
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="queue-remove"

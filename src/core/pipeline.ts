@@ -103,9 +103,12 @@ export function reportKey(shopId: string | null, isoDate: string): string {
 }
 
 export class NoDataError extends Error {
-  constructor(message: string) {
+  /** The files turned away as already entered, so they can still be listed (and let through). */
+  readonly duplicates: DuplicateHit<FingerprintedFile>[]
+  constructor(message: string, duplicates: DuplicateHit<FingerprintedFile>[] = []) {
     super(message)
     this.name = 'NoDataError'
+    this.duplicates = duplicates
   }
 }
 
@@ -320,14 +323,15 @@ async function recognise(
 export async function buildDailyReport(
   files: readonly UploadedFile[],
   storedHashes: ReadonlyMap<string, string> = new Map(),
+  storedIn: ReadonlyMap<string, string> = new Map(),
 ): Promise<DailyReportBuild> {
   const fingerprinted: FingerprintedFile[] = await Promise.all(
     files.map(async (file) => ({ ...file, hash: await sha256Hex(file.bytes) })),
   )
 
-  const { unique, duplicates } = deduplicateByHash(fingerprinted, storedHashes)
+  const { unique, duplicates } = deduplicateByHash(fingerprinted, storedHashes, storedIn)
   if (unique.length === 0) {
-    throw new NoDataError('كل الملفات المرفوعة سبق إدخالها؛ لا يوجد جديد لمعالجته.')
+    throw new NoDataError('كل الملفات المرفوعة سبق إدخالها؛ لا يوجد جديد لمعالجته.', duplicates)
   }
 
   const outcomes = await Promise.all(
