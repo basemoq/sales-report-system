@@ -1,3 +1,4 @@
+import { checkTabsShop } from './tabsShop'
 import {
   buildDailyFigures,
   exclusionReport,
@@ -91,6 +92,13 @@ export interface DailyReportBuild {
   /** Sources this upload did not include; each simply counts as zero. */
   missingSources: string[]
   warnings: string[]
+  /**
+   * A file that was read but whose figures were left out because they do not
+   * belong to this report (a TABS export pulled for another warehouse). Shown
+   * in red: it moves money off the day, and a mark among the warnings is too
+   * easy to sign past.
+   */
+  fileErrors?: string[]
 }
 
 /**
@@ -417,13 +425,24 @@ export async function buildDailyReport(
     )
   }
 
+  // A TABS file pulled for another warehouse is another branch's money: it is
+  // left out of the figures, and the operator is told so in so many words.
+  const fileErrors: string[] = []
+  const tabsShop = checkTabsShop(tabs, caco?.parameters.shopId ?? detailed?.parameters.shopId)
+  if (!tabsShop.ok) {
+    fileErrors.push(tabsShop.error!)
+    tabs = undefined
+  }
+
   // The BSS rows come from the summary, or from the detailed export when only
   // that was uploaded — both describe the same split.
   const figures = buildDailyFigures({ caco, detailed, tabs, mada })
 
   const missingSources: string[] = []
   if (caco === undefined && detailed === undefined) missingSources.push('CACO')
-  if (tabs === undefined) missingSources.push('TABS')
+  // A TABS file turned away was uploaded: the red message says why, and saying
+  // «not uploaded» beside it would contradict it.
+  if (tabs === undefined && tabsShop.ok) missingSources.push('TABS')
   if (mada === undefined) missingSources.push('موازنة مدى')
 
   // A slip cut into strips and photographed one piece at a time is one
@@ -505,6 +524,7 @@ export async function buildDailyReport(
     duplicates,
     missingSources,
     warnings,
+    fileErrors,
   }
 }
 
