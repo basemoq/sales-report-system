@@ -98,6 +98,20 @@ export function parseTabsReport(items: readonly PdfTextItem[]): TabsReport {
 function findLabelledValue(items: readonly PdfTextItem[], label: string): string | null {
   const key = labelKey(label)
   const found = items.find((item) => labelKey(item.text) === key)
-  if (found === undefined) return null
-  return valueRightOf(items, found, (text) => text.trim() !== '')?.text.trim() ?? null
+  if (found !== undefined) {
+    return valueRightOf(items, found, (text) => text.trim() !== '')?.text.trim() ?? null
+  }
+  // Some exports draw the label and its value as one run — `Warehouse: WFW499`
+  // (TABS of 8 November 2026). Reading that as "no warehouse" let another
+  // branch's TABS file through unchecked.
+  const name = label.replace(/:\s*$/, '').trim().toLowerCase()
+  for (const item of items) {
+    const text = item.text.trim()
+    const colon = text.indexOf(':')
+    if (colon <= 0) continue
+    if (text.slice(0, colon).trim().toLowerCase() !== name) continue
+    const value = text.slice(colon + 1).trim()
+    if (value !== '') return value
+  }
+  return null
 }

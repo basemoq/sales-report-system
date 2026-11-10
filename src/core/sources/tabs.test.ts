@@ -123,6 +123,23 @@ describe('parseTabsReport', () => {
     expect(toISODate(report.generatedOn!)).toBe('2026-09-13')
   })
 
+  it('reads the warehouse when the label and its value are one run', () => {
+    // The TABS export of 8 November 2026: `Warehouse: WFW499` as a single item.
+    const items = [
+      ...banner(1),
+      at(1, 897, 369, 'Bill Payment Report'),
+      ...grandTotal(1, 570),
+      ...banner(2),
+      at(2, 895, 386, 'Ordring Report'),
+      at(2, 871, 288, 'Warehouse: WFW499'),
+      at(2, 871, 432, 'User Id:'),
+      at(2, 871, 472, 'SW0348'),
+      ...grandTotal(2, 877, '50'),
+    ]
+
+    expect(parseTabsReport(items).warehouse).toBe('WFW499')
+  })
+
   it('lists the sections it recognised', () => {
     const items = [
       ...banner(1),

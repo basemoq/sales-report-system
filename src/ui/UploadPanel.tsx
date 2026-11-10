@@ -99,9 +99,11 @@ interface Outcome {
   files: FileOutcome[]
   missing: string[]
   warnings: string[]
+  /** Files read but left out of the figures — each said in red. */
+  fileErrors: string[]
 }
 
-const EMPTY: Outcome = { files: [], missing: [], warnings: [] }
+const EMPTY: Outcome = { files: [], missing: [], warnings: [], fileErrors: [] }
 
 export function UploadPanel({ onBuilt, transactions }: Props) {
   const [busy, setBusy] = useState(false)
@@ -192,6 +194,7 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
         ],
         missing: report.missingSources,
         warnings: report.warnings,
+        fileErrors: report.fileErrors ?? [],
       })
       onBuilt(report)
     } catch (cause) {
@@ -206,6 +209,7 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
         files: [...turnedAway, ...failed.map((file) => failedOutcome(file.fileName))],
         missing: [],
         warnings: [],
+        fileErrors: [],
       })
     }
   }
@@ -436,13 +440,22 @@ export function UploadPanel({ onBuilt, transactions }: Props) {
         </div>
       )}
 
+      {/* A file read but left out of the day (another branch's TABS): red, in
+          words, above the panel that would otherwise call the scan a success. */}
+      {outcome.fileErrors.map((message) => (
+        <div className="note error" key={message} role="alert">
+          <Icon name="error" />
+          <p>{message}</p>
+        </div>
+      ))}
+
       {read.length > 0 && (
         <div className="done-panel">
           <span className="done-mark">
             <Icon name="success" />
           </span>
           <div>
-            <h3>اكتمل الفحص بنجاح</h3>
+            <h3>{outcome.fileErrors.length > 0 ? 'اكتمل الفحص — وفيه خطأ في ملف (بالأحمر أعلاه)' : 'اكتمل الفحص بنجاح'}</h3>
             <ul>
               <li>
                 تم التعرّف على {read.length} ملف وقراءته: {read.map((file) => file.kind).join('، ')}.
