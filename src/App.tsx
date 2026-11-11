@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   applyManualCards,
+  applyManualMsap,
   fillDailyTemplate,
   reassignVisaToMastercard,
   type ReportIdentity,
@@ -163,6 +164,8 @@ export default function App() {
   const [enteredCards, setEnteredCards] = useState<
     Partial<Record<keyof CardTotals, string>>
   >({})
+  /** MSAP (app) sales, typed by the supervisor: no export carries them yet. */
+  const [enteredMsap, setEnteredMsap] = useState('')
   const [identity, setIdentity] = useState<ReportIdentity>({ showroom: '', supervisor: '' })
   const [stockLayout, setStockLayout] = useState<StockLayout | null>(null)
   const [stockError, setStockError] = useState<string | null>(null)
@@ -221,6 +224,7 @@ export default function App() {
     setFill({ kind: 'idle' })
     setVisaIsMastercard(false)
     setEnteredCards({})
+    setEnteredMsap('')
   }
 
   // Everything downstream — the displayed figures, the saved report and the
@@ -239,7 +243,8 @@ export default function App() {
             const amount = parseNumber(text)
             if (amount !== null) entered[card] = amount
           }
-          const corrected = applyManualCards(report.figures, entered)
+          const withMsap = applyManualMsap(report.figures, parseNumber(enteredMsap))
+          const corrected = applyManualCards(withMsap, entered)
           return visaIsMastercard ? reassignVisaToMastercard(corrected) : corrected
         })()
 
@@ -405,6 +410,8 @@ export default function App() {
           visaMayBeMastercard={report.visaMayBeMastercard}
           treatVisaAsMastercard={visaIsMastercard}
           enteredCards={enteredCards}
+          enteredMsap={enteredMsap}
+          onEnterMsap={setEnteredMsap}
           onEnterCard={(card, value) =>
             setEnteredCards((current) => ({ ...current, [card]: value }))
           }

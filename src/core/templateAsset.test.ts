@@ -38,8 +38,23 @@ describe('the shipped daily template', () => {
     expect(fill('A1')).toBe('FFEBF1DE')
     expect(fill('A2')).toBe('FFB9CDE5')
     expect(fill('A4')).toBe('FFDDD9C3')
-    expect(fill('A11')).toBe('FFFCD5B5')
-    expect(fill('E11')).toBe('FFC6D9F1')
+    expect(fill('A12')).toBe('FFFCD5B5')
+    expect(fill('E12')).toBe('FFC6D9F1')
     expect(sheet.getCell('A2').font?.name).toBe('Cambria')
+  })
+
+  it('carries the MSAP row (November 2026) inside the total, and the deposit under it', async () => {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(shipped())
+    const sheet = workbook.worksheets[0]
+    const formula = (address: string) => {
+      const value = sheet.getCell(address).value
+      return value && typeof value === 'object' && 'formula' in value ? value.formula : undefined
+    }
+
+    expect(sheet.getCell('A11').value).toBe('MSAP')
+    expect(sheet.getCell('B11').value).toBe('MSAP Sales')
+    expect(formula('E13')).toBe('SUM(D5:D11)')
+    expect(formula('A13')).toBe('E13-D13-C13-B13')
   })
 })

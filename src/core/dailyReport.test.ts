@@ -1,8 +1,11 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs'
 import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import {
   buildDailyFigures,
   applyManualCards,
+  applyManualMsap,
   exclusionReport,
   fillDailyTemplate,
   matchRefunds,
@@ -978,3 +981,50 @@ describe('what the file shows before Excel recalculates it', () => {
   })
 })
 
+
+describe('MSAP (app) sales, typed by the supervisor', () => {
+  const base = () =>
+    buildDailyFigures({
+      caco: caco([{ orderType: 'Sales Order Payment', total: 1000 }]),
+      mada: mada({ mada: 400, visa: 0, mastercard: 0 }),
+    })
+
+  it('is nothing until the supervisor types it', () => {
+    expect(base().msapSales).toBe(0)
+    expect(applyManualMsap(base(), null)).toEqual(base())
+  })
+
+  it('joins the total, and the deposit, as the template sums them', () => {
+    const figures = applyManualMsap(base(), 150.5)
+    expect(figures.msapSales).toBe(150.5)
+    expect(figures.totalSales).toBe(round2(base().totalSales + 150.5))
+    expect(figures.cashDeposit).toBe(round2(base().cashDeposit + 150.5))
+  })
+
+  it('is replaced, not added twice, when typed again', () => {
+    const twice = applyManualMsap(applyManualMsap(base(), 100), 40)
+    expect(twice.totalSales).toBe(round2(base().totalSales + 40))
+  })
+
+  it('keeps a card typed afterwards from undoing it', () => {
+    const figures = applyManualCards(applyManualMsap(base(), 100), { visa: 50 })
+    expect(figures.totalSales).toBe(round2(base().totalSales + 100))
+    expect(figures.cashDeposit).toBe(round2(base().cashDeposit + 100 - 50))
+  })
+
+  it('is written into the MSAP row of the shipped template, and the cards under their headers', async () => {
+    const file = readFileSync(new URL('../assets/daily-template.xlsx', import.meta.url))
+    const shipped = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer
+    const result = await fillDailyTemplate(shipped, applyManualMsap(base(), 75.25))
+    const sheet = await reload(result.bytes)
+
+    expect(sheet.getCell('D11').value).toBe(75.25)
+    expect(sheet.getCell('B13').value).toBe(400)
+    expect(result.warnings.join()).not.toContain('MSAP')
+  })
+
+  it('warns, rather than dropping it silently, when an older template has no MSAP row', async () => {
+    const result = await fillDailyTemplate(await templateBytes(), applyManualMsap(base(), 75.25))
+    expect(result.warnings.join()).toContain('MSAP')
+  })
+})

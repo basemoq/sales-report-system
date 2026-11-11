@@ -28,6 +28,9 @@ interface Props {
    */
   enteredCards: Partial<Record<keyof CardTotals, string>>
   onEnterCard: (card: keyof CardTotals, value: string) => void
+  /** MSAP (app) sales as typed by the supervisor; no file carries them. */
+  enteredMsap?: string
+  onEnterMsap?: (value: string) => void
   /** The day's photographs, to read a figure off when the scan could not. */
   receiptImages: readonly UploadedFile[]
   /** A saved report, shown again: its figures are as they were saved, so nothing is typed over. */
@@ -72,6 +75,8 @@ export function FiguresPanel({
   onTreatVisaAsMastercard,
   enteredCards,
   onEnterCard,
+  enteredMsap = '',
+  onEnterMsap,
   receiptImages,
   readOnly = false,
 }: Props) {
@@ -99,12 +104,35 @@ export function FiguresPanel({
       </h2>
 
       {/*
+        * MSAP (app) sales: no export carries them yet, so the supervisor types
+        * the figure in. Kept in the open, not in the folded rows below, so it
+        * is not signed past; it prints as the number alone.
+        */}
+      {!readOnly && onEnterMsap !== undefined && (
+        <div className="msap-entry">
+          <label>
+            <span>MSAP Sales — مبيعات التطبيق (إدخال يدوي)</span>
+            <input
+              className={enteredMsap !== '' ? 'cell-input is-entered no-print' : 'cell-input no-print'}
+              type="text"
+              inputMode="decimal"
+              aria-label="MSAP Sales"
+              placeholder="0.00"
+              value={enteredMsap}
+              onChange={(event) => onEnterMsap(event.target.value)}
+            />
+          </label>
+          <span className="print-only">MSAP Sales: {formatMoney(figures.msapSales ?? 0)}</span>
+        </div>
+      )}
+
+      {/*
         * The six system rows, folded away by default: the three figures that
         * matter are in the summary at the top of the page, and this is the
         * working behind them. It still prints, so the report on paper is
         * unchanged.
         */}
-      <Collapsible title="تفاصيل الأنظمة" icon="report" count={systemRows.length}>
+      <Collapsible title="تفاصيل الأنظمة" icon="report" count={systemRows.length + 1}>
       <div className="table-scroll">
         <table className="data-table">
           <thead>
@@ -122,6 +150,15 @@ export function FiguresPanel({
                 <td className="num">{formatMoney(amount)}</td>
               </tr>
             ))}
+            {/*
+              * Sales through the app. No report carries them yet, so the
+              * supervisor types the figure; it joins the total and the deposit.
+              */}
+            <tr>
+              <td>MSAP</td>
+              <td>MSAP Sales</td>
+              <td className="num">{formatMoney(figures.msapSales ?? 0)}</td>
+            </tr>
           </tbody>
           <tfoot>
             <tr>

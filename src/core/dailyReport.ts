@@ -15,7 +15,13 @@ export interface DailyFigures {
   tabs: TabsTotals
   bss: BssTotals
   cards: CardTotals
-  /** The six system figures added up, mirroring the template's own SUM. */
+  /**
+   * Sales the employee made through the app (MSAP). No export carries them yet,
+   * so the supervisor types the figure in; 0 until they do. A report saved
+   * before the row existed has none, and reads as 0.
+   */
+  msapSales: number
+  /** The six system figures and MSAP added up, mirroring the template's own SUM. */
   totalSales: number
   /**
    * Sales taken on a payment method that reaches neither the drawer nor the
@@ -481,6 +487,7 @@ export function buildDailyFigures(sources: DailySources): DailyFigures {
       null,
     tabs,
     bss,
+    msapSales: 0,
     cards,
     totalSales,
     offDrawerSales,
@@ -503,6 +510,21 @@ function withCards(figures: DailyFigures, cards: CardTotals): DailyFigures {
       figures.totalSales - cards.mada - cards.visa - cards.mastercard - figures.offDrawerSales,
     ),
   }
+}
+
+/**
+ * The MSAP (app) sales the supervisor typed in. They are sales like any other,
+ * so they join the total; and the template takes everything not on a card as
+ * the cash deposit, so the deposit is worked out again with them in it.
+ */
+export function applyManualMsap(figures: DailyFigures, amount: number | null): DailyFigures {
+  const previous = figures.msapSales ?? 0
+  const msapSales = round2(amount ?? 0)
+  if (msapSales === previous) return { ...figures, msapSales }
+  return withCards(
+    { ...figures, msapSales, totalSales: round2(figures.totalSales - previous + msapSales) },
+    figures.cards,
+  )
 }
 
 /**
@@ -592,13 +614,20 @@ const CARD_HEADERS: Record<keyof CardTotals, string[]> = {
 }
 
 /** Template row labels, against the figures that fill them. */
-const AMOUNT_ROWS: { system: string; category: string[]; value: (f: DailyFigures) => number }[] = [
+const AMOUNT_ROWS: {
+  system: string
+  category: string[]
+  value: (f: DailyFigures) => number
+  /** A row an older template lacks: missing it is only worth a word when it has money to carry. */
+  optional?: boolean
+}[] = [
   { system: 'TABS', category: ['Total Bill Payment'], value: (f) => f.tabs.billPayment },
   { system: 'TABS', category: ['Total Ordering'], value: (f) => f.tabs.ordering },
   { system: 'TABS', category: ['Total Cash Collection'], value: (f) => f.tabs.cashCollection },
   { system: 'BSS', category: ['Total Bill Payment'], value: (f) => f.bss.billPayment },
   { system: 'BSS', category: ['Total Ordering'], value: (f) => f.bss.ordering },
   { system: 'BSS', category: ['Total Cash Sales'], value: (f) => f.bss.cashSales },
+  { system: 'MSAP', category: ['MSAP Sales'], value: (f) => f.msapSales ?? 0, optional: true },
 ]
 
 const keysOf = (labels: readonly string[]) => new Set(labels.map(matchKey))
@@ -755,7 +784,7 @@ export async function fillDailyTemplate(
       filled = true
     })
 
-    if (!filled) {
+    if (!filled && !(target.optional && Math.abs(target.value(figures)) < 0.005)) {
       warnings.push(`لم يُعثر في القالب على صف «${target.system} — ${target.category[0]}».`)
     }
   }
