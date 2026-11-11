@@ -63,7 +63,25 @@ function ClosingHeads() {
   )
 }
 
-function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
+/** Money refunded by the region on this employee's cancelled orders, said beside a surplus. */
+function refundNote(employee: EmployeeSummary, check: CashCheck): string | null {
+  const orders = employee.refundedOrders ?? []
+  if (orders.length === 0 || check.difference < 0.005) return null
+  const total = orders.reduce((sum, order) => sum + order.amount, 0)
+  const times = orders.map((order) => order.time).filter((time): time is string => !!time)
+  return `منه حتى ${formatMoney(total)} مقابل ${orders.length === 1 ? 'طلب ملغى' : `${orders.length} طلبات ملغاة`} رجّعتها الإدارة${times.length ? ` (${times.join('، ')})` : ''}`
+}
+
+function ClosingCells({
+  userId,
+  check,
+  employee,
+}: {
+  userId: string
+  check: CashCheck
+  employee: EmployeeSummary
+}) {
+  const note = refundNote(employee, check)
   return (
     <>
       <td className="num closing-col" data-closing-cash={userId}>
@@ -77,6 +95,11 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
       </td>
       <td className={`num ${differenceTone(check.difference)}`} data-cash-diff={userId}>
         {formatMoney(check.difference)}
+        {note && (
+          <small className="refund-note" data-refund-note={userId}>
+            {note}
+          </small>
+        )}
       </td>
     </>
   )
@@ -221,7 +244,9 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
                     {formatMoney(employee.byPaymentMethod[method] ?? 0)}
                   </td>
                 ))}
-                {checks && <ClosingCells userId={employee.userId} check={checks[index]} />}
+                {checks && (
+                  <ClosingCells userId={employee.userId} check={checks[index]} employee={employee} />
+                )}
                 <td className="no-print">
                   <button
                     type="button"

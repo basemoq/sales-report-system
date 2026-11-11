@@ -177,6 +177,29 @@ describe('buildDailyReport', () => {
     expect(report.figures.totalSales).toBe(100)
   })
 
+  it('names the cancelled order a central refund reversed, for the surplus it leaves in the drawer', async () => {
+    // 10 November 2026: a 120.00 order taken in cash, cancelled, and refunded
+    // by the region. CACO nets the pair to nothing; the cash is still in the
+    // seller's drawer, so the closing reads it as a surplus.
+    const report = await buildDailyReport([
+      await cacoDetailedWithLines([
+        ['ABDULLAH.YOUSEF', 120, '966590000021', 'Visitor 120 Plus'],
+        ['ABDULLAH.YOUSEF', 100, '966500000001', 'Setup Fee'],
+        ['zainops', -120, '966590000021', 'Refund'],
+      ]),
+    ])
+
+    const [employee] = report.employees
+    expect(employee.refundedOrders?.map((order) => order.amount)).toEqual([120])
+  })
+
+  it('names nothing when no refund reversed the employee’s orders', async () => {
+    const report = await buildDailyReport([
+      await cacoDetailedWithLines([['ABDULLAH.YOUSEF', 100, '966500000001', 'Setup Fee']]),
+    ])
+    expect(report.employees[0].refundedOrders).toBeUndefined()
+  })
+
   it('leaves a refund whose sale was not found on whoever processed it', async () => {
     // Nothing says whose sale it reversed, so moving it would be a guess; it is
     // already reported as needing a person.
