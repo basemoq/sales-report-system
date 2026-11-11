@@ -8,7 +8,21 @@ import type { EmployeeSummary } from './model'
  */
 export interface ClosingCash {
   /** Keyed by the login (the CACO user id), upper-cased. */
-  byUser: Record<string, { cash: number; span: number | null; closings: number }>
+  byUser: Record<
+    string,
+    {
+      cash: number
+      span: number | null
+      /**
+       * TABS recorded at closing. The closing's cash holds TABS money too, and
+       * CACO does not, so without it every TABS sale reads as a surplus
+       * (10 November 2026: 129.13 on one employee). `null` from a control
+       * center that does not send it yet.
+       */
+      tabs: number | null
+      closings: number
+    }
+  >
   /** Closings in the range that could not be tied to a login, by the name typed. */
   unmatched: string[]
 }
@@ -29,10 +43,13 @@ export interface CashCheck {
   cash: number | null
   /** SPAN recorded at closing; `null` when no closing was recorded, or it was not sent. */
   span: number | null
+  /** TABS recorded at closing; `null` when no closing was recorded, or it was not sent. */
+  tabs: number | null
   /**
-   * (Closing cash + closing SPAN) − (CACO cash + CACO SPAN): below zero is a
-   * shortage, the same sum the shift closing itself makes. No closing counts as
-   * nothing recorded.
+   * (Closing cash + closing SPAN) − (CACO cash + CACO SPAN + closing TABS):
+   * below zero is a shortage, the same sum the shift closing itself makes —
+   * whose required cash is TABS + BSS − SPAN. No closing counts as nothing
+   * recorded.
    */
   difference: number
 }
@@ -45,12 +62,15 @@ export function checkCash(employee: EmployeeSummary, closing: ClosingCash): Cash
   const entry = closing.byUser[employee.userId.trim().toUpperCase()]
   const cash = entry ? round2(entry.cash) : null
   const span = entry && entry.span !== null ? round2(entry.span) : null
+  const tabs = entry && entry.tabs !== null && entry.tabs !== undefined ? round2(entry.tabs) : null
   return {
     cacoCash,
     cacoSpan,
     cash,
     span,
-    difference: round2((cash ?? 0) + (span ?? 0) - cacoCash - cacoSpan),
+    tabs,
+    // `|| 0`: a match can round to -0, which would print as «-0.00».
+    difference: round2((cash ?? 0) + (span ?? 0) - cacoCash - cacoSpan - (tabs ?? 0)) || 0,
   }
 }
 
@@ -62,13 +82,15 @@ export function readReply(data: unknown, id: string): ClosingCash | null | undef
   if (!message.byUser || typeof message.byUser !== 'object') return null
   const byUser: ClosingCash['byUser'] = {}
   for (const [user, value] of Object.entries(message.byUser as Record<string, unknown>)) {
-    const entry = value as { cash?: unknown; span?: unknown; closings?: unknown } | null
+    const entry = value as { cash?: unknown; span?: unknown; tabs?: unknown; closings?: unknown } | null
     const cash = Number(entry?.cash)
     if (!Number.isFinite(cash)) continue
     const span = entry?.span === null || entry?.span === undefined ? null : Number(entry.span)
+    const tabs = entry?.tabs === null || entry?.tabs === undefined ? null : Number(entry.tabs)
     byUser[user.trim().toUpperCase()] = {
       cash,
       span: span !== null && Number.isFinite(span) ? span : null,
+      tabs: tabs !== null && Number.isFinite(tabs) ? tabs : null,
       closings: Math.max(0, Number(entry?.closings) || 0),
     }
   }

@@ -16,7 +16,7 @@ const employee = (userId: string, cash?: number, span = 0): EmployeeSummary => (
 })
 
 describe('checkCash', () => {
-  const closing = { byUser: { 'BASEM.ALAWALGY': { cash: 400, span: 200, closings: 1 } }, unmatched: [] }
+  const closing = { byUser: { 'BASEM.ALAWALGY': { cash: 400, span: 200, tabs: null, closings: 1 } }, unmatched: [] }
 
   it('matches the login whatever its case, and sets cash and SPAN against CACO together', () => {
     expect(checkCash(employee('Basem.Alawalgy', 470, 200), closing)).toEqual({
@@ -24,6 +24,7 @@ describe('checkCash', () => {
       cacoSpan: 200,
       cash: 400,
       span: 200,
+      tabs: null,
       difference: -70,
     })
   })
@@ -42,6 +43,7 @@ describe('checkCash', () => {
       cacoSpan: 30,
       cash: null,
       span: null,
+      tabs: null,
       difference: -150.5,
     })
   })
@@ -51,8 +53,22 @@ describe('checkCash', () => {
   })
 
   it('counts a closing sent without its SPAN as cash alone', () => {
-    const cashOnly = { byUser: { 'BASEM.ALAWALGY': { cash: 400, span: null, closings: 1 } }, unmatched: [] }
+    const cashOnly = { byUser: { 'BASEM.ALAWALGY': { cash: 400, span: null, tabs: null, closings: 1 } }, unmatched: [] }
     expect(checkCash(employee('Basem.Alawalgy', 400), cashOnly)).toMatchObject({ span: null, difference: 0 })
+  })
+
+  it('takes the TABS recorded at closing off, since its cash is in the closing and not in CACO', () => {
+    // 10 November 2026: 129.13 of TABS in the closing read as a 129.13 surplus.
+    const withTabs = { byUser: { 'MANSOUR.ALREMY': { cash: 341.5, span: 918.72, tabs: 129.13, closings: 1 } }, unmatched: [] }
+    expect(checkCash(employee('Mansour.Alremy', 212.37, 918.72), withTabs)).toMatchObject({
+      tabs: 129.13,
+      difference: 0,
+    })
+  })
+
+  it('still shows a real shortage once TABS is accounted for', () => {
+    const withTabs = { byUser: { 'MANSOUR.ALREMY': { cash: 300, span: 918.72, tabs: 129.13, closings: 1 } }, unmatched: [] }
+    expect(checkCash(employee('Mansour.Alremy', 212.37, 918.72), withTabs).difference).toBe(-41.5)
   })
 })
 
@@ -73,7 +89,7 @@ describe('readReply', () => {
         type: 'sales-report:closing-cash',
         id: 'a',
         byUser: {
-          'basem.alawalgy': { cash: '400.5', span: '120', closings: 2 },
+          'basem.alawalgy': { cash: '400.5', span: '120', tabs: '50.25', closings: 2 },
           'ali.test': { cash: 10 },
           bad: { cash: 'x' },
         },
@@ -83,8 +99,8 @@ describe('readReply', () => {
     )
     expect(reply).toEqual({
       byUser: {
-        'BASEM.ALAWALGY': { cash: 400.5, span: 120, closings: 2 },
-        'ALI.TEST': { cash: 10, span: null, closings: 0 },
+        'BASEM.ALAWALGY': { cash: 400.5, span: 120, tabs: 50.25, closings: 2 },
+        'ALI.TEST': { cash: 10, span: null, tabs: null, closings: 0 },
       },
       unmatched: ['خالد'],
     })

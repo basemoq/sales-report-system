@@ -57,6 +57,7 @@ function ClosingHeads() {
     <>
       <th className="closing-col">كاش الإغلاق</th>
       <th className="closing-col">اسبان الإغلاق</th>
+      <th className="closing-col">تابز الإغلاق</th>
       <th>الفرق</th>
     </>
   )
@@ -70,6 +71,9 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
       </td>
       <td className="num closing-col" data-closing-span={userId}>
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
+      </td>
+      <td className="num closing-col" data-closing-tabs={userId}>
+        {check.cash === null ? '—' : check.tabs === null ? '—' : formatMoney(check.tabs)}
       </td>
       <td className={`num ${differenceTone(check.difference)}`} data-cash-diff={userId}>
         {formatMoney(check.difference)}
@@ -86,6 +90,7 @@ function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
     <>
       <th className="num closing-col">{formatMoney(sum((check) => check.cash))}</th>
       <th className="num closing-col">{formatMoney(sum((check) => check.span))}</th>
+      <th className="num closing-col">{formatMoney(sum((check) => check.tabs))}</th>
       <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
     </>
   )
@@ -177,8 +182,9 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
       </p>
       {cash && (
         <p className="muted closing-cash-note">
-          «كاش الإغلاق» و«اسبان الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» =
-          (كاش الإغلاق + اسبان الإغلاق) − (كاش الكاكو + اسبان الكاكو): السالب عجز، والموجب فائض.
+          «كاش الإغلاق» و«اسبان الإغلاق» و«تابز الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» =
+          (كاش الإغلاق + اسبان الإغلاق) − (كاش الكاكو + اسبان الكاكو + تابز الإغلاق): السالب عجز، والموجب
+          فائض. التابز لا يظهر في الكاكو، وكاشه داخل كاش الإغلاق، فيُطرح.
           لا إغلاق = لم يُسجّل شيء.
           {cash.unmatched.length > 0 && (
             <> إغلاقات لم تُطابَق بيوزر: {cash.unmatched.join('، ')}.</>
