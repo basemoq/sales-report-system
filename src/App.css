@@ -1730,3 +1730,26 @@ details[open] > summary .collapsible-arrow {
 .saved-view-head p {
   margin: 0 0 0.75rem;
 }
+
+/* MSAP (app) sales, typed by the supervisor: a field in the open, with a visible box. */
+.msap-entry {
+  margin-block: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.msap-entry label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.msap-entry .cell-input {
+  width: 10rem;
+  flex: 0 0 auto;
+  border-color: var(--line-strong);
+}
