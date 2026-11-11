@@ -57,12 +57,31 @@ function ClosingHeads() {
     <>
       <th className="closing-col">كاش الإغلاق</th>
       <th className="closing-col">اسبان الإغلاق</th>
+      <th className="closing-col">تابز الإغلاق</th>
       <th>الفرق</th>
     </>
   )
 }
 
-function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
+/** Money refunded by the region on this employee's cancelled orders, said beside a surplus. */
+function refundNote(employee: EmployeeSummary, check: CashCheck): string | null {
+  const orders = employee.refundedOrders ?? []
+  if (orders.length === 0 || check.difference < 0.005) return null
+  const total = orders.reduce((sum, order) => sum + order.amount, 0)
+  const times = orders.map((order) => order.time).filter((time): time is string => !!time)
+  return `منه حتى ${formatMoney(total)} مقابل ${orders.length === 1 ? 'طلب ملغى' : `${orders.length} طلبات ملغاة`} رجّعتها الإدارة${times.length ? ` (${times.join('، ')})` : ''}`
+}
+
+function ClosingCells({
+  userId,
+  check,
+  employee,
+}: {
+  userId: string
+  check: CashCheck
+  employee: EmployeeSummary
+}) {
+  const note = refundNote(employee, check)
   return (
     <>
       <td className="num closing-col" data-closing-cash={userId}>
@@ -71,8 +90,16 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
       <td className="num closing-col" data-closing-span={userId}>
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
       </td>
+      <td className="num closing-col" data-closing-tabs={userId}>
+        {check.cash === null ? '—' : check.tabs === null ? '—' : formatMoney(check.tabs)}
+      </td>
       <td className={`num ${differenceTone(check.difference)}`} data-cash-diff={userId}>
         {formatMoney(check.difference)}
+        {note && (
+          <small className="refund-note" data-refund-note={userId}>
+            {note}
+          </small>
+        )}
       </td>
     </>
   )
@@ -86,6 +113,7 @@ function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
     <>
       <th className="num closing-col">{formatMoney(sum((check) => check.cash))}</th>
       <th className="num closing-col">{formatMoney(sum((check) => check.span))}</th>
+      <th className="num closing-col">{formatMoney(sum((check) => check.tabs))}</th>
       <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
     </>
   )
@@ -177,8 +205,9 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
       </p>
       {cash && (
         <p className="muted closing-cash-note">
-          «كاش الإغلاق» و«اسبان الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» =
-          (كاش الإغلاق + اسبان الإغلاق) − (كاش الكاكو + اسبان الكاكو): السالب عجز، والموجب فائض.
+          «كاش الإغلاق» و«اسبان الإغلاق» و«تابز الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» =
+          (كاش الإغلاق + اسبان الإغلاق) − (كاش الكاكو + اسبان الكاكو + تابز الإغلاق): السالب عجز، والموجب
+          فائض. التابز لا يظهر في الكاكو، وكاشه داخل كاش الإغلاق، فيُطرح.
           لا إغلاق = لم يُسجّل شيء.
           {cash.unmatched.length > 0 && (
             <> إغلاقات لم تُطابَق بيوزر: {cash.unmatched.join('، ')}.</>
@@ -215,7 +244,9 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
                     {formatMoney(employee.byPaymentMethod[method] ?? 0)}
                   </td>
                 ))}
-                {checks && <ClosingCells userId={employee.userId} check={checks[index]} />}
+                {checks && (
+                  <ClosingCells userId={employee.userId} check={checks[index]} employee={employee} />
+                )}
                 <td className="no-print">
                   <button
                     type="button"

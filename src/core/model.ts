@@ -19,6 +19,14 @@ export interface EmployeeSummary {
   activations?: number
   /** Amount settled per payment method, as the export names them. */
   byPaymentMethod: Record<string, number>
+  /**
+   * The employee's cancelled orders that a refund reversed — usually issued
+   * centrally (`zainops`), not from the drawer. CACO nets each pair to nothing,
+   * but the money the customer paid is still in this employee's drawer or on
+   * the terminal, so the closing reads it as a surplus. Listed so the report
+   * can say why. Absent when there were none, and on reports saved before.
+   */
+  refundedOrders?: { time: string | null; amount: number; method: string }[]
   days: DayDetail[]
 }
 

@@ -514,7 +514,7 @@ export async function buildDailyReport(
     figures,
     // The same rows the figures left out are left out here, so the two halves
     // of one report cannot disagree about what the day sold.
-    employees: summarizeEmployees(countedForEmployees(detailed)),
+    employees: withRefundedOrders(summarizeEmployees(countedForEmployees(detailed)), detailed),
     transactions: detailed?.transactions ?? [],
     receiptImages: unique
       .filter((file) => isImage(file.bytes))
@@ -600,6 +600,29 @@ function joinScannedReceipt(
  * A refund whose original was not found stays where it is. Nothing says whose
  * sale it reversed, and that is already reported as needing a person.
  */
+/**
+ * Each employee's cancelled orders that a refund reversed. The pair leaves the
+ * figures, yet the customer's money was taken at the counter and the refund
+ * came from elsewhere — so the closing shows it as a surplus, and the report
+ * names the order instead of leaving a bare number (10 November 2026: 120.00
+ * on one employee, one refunded Visitor order).
+ */
+function withRefundedOrders(employees: EmployeeSummary[], detailed?: CacoDetailed): EmployeeSummary[] {
+  if (detailed === undefined) return employees
+  const byUser = new Map<string, { time: string | null; amount: number; method: string }[]>()
+  for (const { reversed } of matchRefunds(detailed)) {
+    if (reversed === null) continue
+    const key = reversed.userId.trim().toUpperCase()
+    const list = byUser.get(key) ?? []
+    list.push({ time: reversed.time, amount: reversed.amount, method: reversed.paymentMethod })
+    byUser.set(key, list)
+  }
+  return employees.map((employee) => {
+    const refunded = byUser.get(employee.userId.trim().toUpperCase())
+    return refunded && refunded.length > 0 ? { ...employee, refundedOrders: refunded } : employee
+  })
+}
+
 function countedForEmployees(detailed?: CacoDetailed): CacoTransaction[] {
   if (detailed === undefined) return []
 
