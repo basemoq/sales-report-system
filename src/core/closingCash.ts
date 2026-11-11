@@ -20,6 +20,13 @@ export interface ClosingCash {
        * center that does not send it yet.
        */
       tabs: number | null
+      /**
+       * The closing's own difference (actual cash − required cash), as the
+       * employee saw it when closing. The owner's call (11 November 2026): the
+       * check is the closing itself and the day's mada reconciliation, not
+       * CACO. `null` from a control center that does not send it yet.
+       */
+      difference: number | null
       closings: number
     }
   >
@@ -46,12 +53,11 @@ export interface CashCheck {
   /** TABS recorded at closing; `null` when no closing was recorded, or it was not sent. */
   tabs: number | null
   /**
-   * (Closing cash + closing SPAN) − (CACO cash + CACO SPAN + closing TABS):
-   * below zero is a shortage, the same sum the shift closing itself makes —
-   * whose required cash is TABS + BSS − SPAN. No closing counts as nothing
-   * recorded.
+   * The closing's own difference: below zero is a shortage. `null` when no
+   * closing was recorded. From a control center that does not send it, the
+   * older sum against CACO stands in.
    */
-  difference: number
+  difference: number | null
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100
@@ -70,7 +76,11 @@ export function checkCash(employee: EmployeeSummary, closing: ClosingCash): Cash
     span,
     tabs,
     // `|| 0`: a match can round to -0, which would print as «-0.00».
-    difference: round2((cash ?? 0) + (span ?? 0) - cacoCash - cacoSpan - (tabs ?? 0)) || 0,
+    difference: !entry
+      ? null
+      : entry.difference !== null && entry.difference !== undefined
+        ? round2(entry.difference) || 0
+        : round2((cash ?? 0) + (span ?? 0) - cacoCash - cacoSpan - (tabs ?? 0)) || 0,
   }
 }
 
@@ -82,15 +92,20 @@ export function readReply(data: unknown, id: string): ClosingCash | null | undef
   if (!message.byUser || typeof message.byUser !== 'object') return null
   const byUser: ClosingCash['byUser'] = {}
   for (const [user, value] of Object.entries(message.byUser as Record<string, unknown>)) {
-    const entry = value as { cash?: unknown; span?: unknown; tabs?: unknown; closings?: unknown } | null
+    const entry = value as
+      | { cash?: unknown; span?: unknown; tabs?: unknown; difference?: unknown; closings?: unknown }
+      | null
     const cash = Number(entry?.cash)
     if (!Number.isFinite(cash)) continue
     const span = entry?.span === null || entry?.span === undefined ? null : Number(entry.span)
     const tabs = entry?.tabs === null || entry?.tabs === undefined ? null : Number(entry.tabs)
+    const difference =
+      entry?.difference === null || entry?.difference === undefined ? null : Number(entry.difference)
     byUser[user.trim().toUpperCase()] = {
       cash,
       span: span !== null && Number.isFinite(span) ? span : null,
       tabs: tabs !== null && Number.isFinite(tabs) ? tabs : null,
+      difference: difference !== null && Number.isFinite(difference) ? difference : null,
       closings: Math.max(0, Number(entry?.closings) || 0),
     }
   }
@@ -132,4 +147,26 @@ export function requestClosingCash(
       done(null)
     }
   })
+}
+
+/**
+ * The day's SPAN, checked once for the branch: what the employees recorded
+ * at closing against the mada reconciliation (mada + Visa + MasterCard). The
+ * terminal closes one slip for the whole branch, so this is where SPAN is
+ * proved — not against CACO, which can miss a payment or carry a cancelled one.
+ */
+export interface SpanCheck {
+  closingSpan: number
+  reconciliation: number
+  /** Closing SPAN − reconciliation: zero when they agree. */
+  difference: number
+}
+
+export function checkSpan(checks: readonly CashCheck[], reconciliation: number): SpanCheck {
+  const closingSpan = round2(checks.reduce((sum, check) => sum + (check.span ?? 0), 0))
+  return {
+    closingSpan,
+    reconciliation: round2(reconciliation),
+    difference: round2(closingSpan - reconciliation) || 0,
+  }
 }

@@ -1754,12 +1754,8 @@ details[open] > summary .collapsible-arrow {
   border-color: var(--line-strong);
 }
 
-/* Why a surplus is there: a cancelled order the region refunded. */
-.refund-note {
-  display: block;
-  margin-top: 0.15rem;
-  font-size: 0.75em;
-  font-weight: 400;
-  color: var(--muted);
-  white-space: normal;
+/* The day's SPAN against the mada reconciliation: one line, coloured like a difference. */
+.span-check {
+  margin-block: 0.5rem;
+  font-weight: 600;
 }

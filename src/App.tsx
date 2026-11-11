@@ -529,7 +529,15 @@ export default function App() {
 
         {report && (
           <Collapsible title="تقرير الموظفين" icon="users" count={report.employees.length}>
-            <EmployeesPanel employees={report.employees} reportDate={report.reportDate} />
+            <EmployeesPanel
+              employees={report.employees}
+              reportDate={report.reportDate}
+              reconciliation={
+                report.missingSources.includes('موازنة مدى') || figures === null
+                  ? null
+                  : figures.cards.mada + figures.cards.visa + figures.cards.mastercard
+              }
+            />
           </Collapsible>
         )}
 
