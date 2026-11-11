@@ -532,11 +532,12 @@ export default function App() {
             <EmployeesPanel
               employees={report.employees}
               reportDate={report.reportDate}
-              reconciliation={
-                report.missingSources.includes('موازنة مدى') || figures === null
-                  ? null
-                  : figures.cards.mada + figures.cards.visa + figures.cards.mastercard
-              }
+              reconciliation={(() => {
+                // Read off the receipt, or typed in when it would not read: either is the day's slip.
+                if (figures === null) return null
+                const total = figures.cards.mada + figures.cards.visa + figures.cards.mastercard
+                return total > 0 || !report.missingSources.includes('موازنة مدى') ? total : null
+              })()}
             />
           </Collapsible>
         )}
