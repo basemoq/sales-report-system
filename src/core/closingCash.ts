@@ -20,6 +20,8 @@ export interface ClosingCash {
        * center that does not send it yet.
        */
       tabs: number | null
+      /** MSAP (app) sales recorded at closing; `null` from a control center that does not send it. */
+      msap: number | null
       /**
        * The closing's own difference (actual cash − required cash), as the
        * employee saw it when closing. The owner's call (11 November 2026): the
@@ -52,6 +54,8 @@ export interface CashCheck {
   span: number | null
   /** TABS recorded at closing; `null` when no closing was recorded, or it was not sent. */
   tabs: number | null
+  /** MSAP (app) sales recorded at closing; `null` when no closing was recorded, or it was not sent. */
+  msap: number | null
   /**
    * The closing's own difference: below zero is a shortage. `null` when no
    * closing was recorded. From a control center that does not send it, the
@@ -69,12 +73,14 @@ export function checkCash(employee: EmployeeSummary, closing: ClosingCash): Cash
   const cash = entry ? round2(entry.cash) : null
   const span = entry && entry.span !== null ? round2(entry.span) : null
   const tabs = entry && entry.tabs !== null && entry.tabs !== undefined ? round2(entry.tabs) : null
+  const msap = entry && entry.msap !== null && entry.msap !== undefined ? round2(entry.msap) : null
   return {
     cacoCash,
     cacoSpan,
     cash,
     span,
     tabs,
+    msap,
     // `|| 0`: a match can round to -0, which would print as «-0.00».
     difference: !entry
       ? null
@@ -93,18 +99,20 @@ export function readReply(data: unknown, id: string): ClosingCash | null | undef
   const byUser: ClosingCash['byUser'] = {}
   for (const [user, value] of Object.entries(message.byUser as Record<string, unknown>)) {
     const entry = value as
-      | { cash?: unknown; span?: unknown; tabs?: unknown; difference?: unknown; closings?: unknown }
+      | { cash?: unknown; span?: unknown; tabs?: unknown; msap?: unknown; difference?: unknown; closings?: unknown }
       | null
     const cash = Number(entry?.cash)
     if (!Number.isFinite(cash)) continue
     const span = entry?.span === null || entry?.span === undefined ? null : Number(entry.span)
     const tabs = entry?.tabs === null || entry?.tabs === undefined ? null : Number(entry.tabs)
+    const msap = entry?.msap === null || entry?.msap === undefined ? null : Number(entry.msap)
     const difference =
       entry?.difference === null || entry?.difference === undefined ? null : Number(entry.difference)
     byUser[user.trim().toUpperCase()] = {
       cash,
       span: span !== null && Number.isFinite(span) ? span : null,
       tabs: tabs !== null && Number.isFinite(tabs) ? tabs : null,
+      msap: msap !== null && Number.isFinite(msap) ? msap : null,
       difference: difference !== null && Number.isFinite(difference) ? difference : null,
       closings: Math.max(0, Number(entry?.closings) || 0),
     }
