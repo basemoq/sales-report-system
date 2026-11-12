@@ -58,6 +58,11 @@ export function SavedReportView({
         employees={shown.employees}
         reportDate={shown.reportDate}
         id="saved-employee-report"
+        reconciliation={(() => {
+          const cards = shown.figures.cards
+          const total = cards.mada + cards.visa + cards.mastercard
+          return total > 0 ? total : null
+        })()}
       />
     </div>
   )

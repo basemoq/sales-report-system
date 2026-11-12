@@ -3,6 +3,7 @@ import {
   CASH_METHOD,
   SPAN_METHOD,
   checkCash,
+  checkSpan,
   requestClosingCash,
   type CashCheck,
   type ClosingCash,
@@ -17,6 +18,11 @@ interface Props {
   reportDate: string
   /** A saved report shown below the day's own has a panel of its own. */
   id?: string
+  /**
+   * The day's mada reconciliation (mada + Visa + MasterCard), to prove the
+   * closings' SPAN against; `null` when no receipt was read.
+   */
+  reconciliation?: number | null
 }
 
 /**
@@ -57,31 +63,13 @@ function ClosingHeads() {
     <>
       <th className="closing-col">كاش الإغلاق</th>
       <th className="closing-col">اسبان الإغلاق</th>
-      <th className="closing-col">تابز الإغلاق</th>
       <th>الفرق</th>
     </>
   )
 }
 
-/** Money refunded by the region on this employee's cancelled orders, said beside a surplus. */
-function refundNote(employee: EmployeeSummary, check: CashCheck): string | null {
-  const orders = employee.refundedOrders ?? []
-  if (orders.length === 0 || check.difference < 0.005) return null
-  const total = orders.reduce((sum, order) => sum + order.amount, 0)
-  const times = orders.map((order) => order.time).filter((time): time is string => !!time)
-  return `منه حتى ${formatMoney(total)} مقابل ${orders.length === 1 ? 'طلب ملغى' : `${orders.length} طلبات ملغاة`} رجّعتها الإدارة${times.length ? ` (${times.join('، ')})` : ''}`
-}
+function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
 
-function ClosingCells({
-  userId,
-  check,
-  employee,
-}: {
-  userId: string
-  check: CashCheck
-  employee: EmployeeSummary
-}) {
-  const note = refundNote(employee, check)
   return (
     <>
       <td className="num closing-col" data-closing-cash={userId}>
@@ -90,16 +78,8 @@ function ClosingCells({
       <td className="num closing-col" data-closing-span={userId}>
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
       </td>
-      <td className="num closing-col" data-closing-tabs={userId}>
-        {check.cash === null ? '—' : check.tabs === null ? '—' : formatMoney(check.tabs)}
-      </td>
-      <td className={`num ${differenceTone(check.difference)}`} data-cash-diff={userId}>
-        {formatMoney(check.difference)}
-        {note && (
-          <small className="refund-note" data-refund-note={userId}>
-            {note}
-          </small>
-        )}
+      <td className={`num ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId}>
+        {check.difference === null ? '—' : formatMoney(check.difference)}
       </td>
     </>
   )
@@ -108,18 +88,22 @@ function ClosingCells({
 function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
   const sum = (pick: (check: CashCheck) => number | null) =>
     checks.reduce((total, check) => total + (pick(check) ?? 0), 0)
-  const difference = sum((check) => check.difference)
+  const difference = Math.round(sum((check) => check.difference) * 100) / 100
   return (
     <>
       <th className="num closing-col">{formatMoney(sum((check) => check.cash))}</th>
       <th className="num closing-col">{formatMoney(sum((check) => check.span))}</th>
-      <th className="num closing-col">{formatMoney(sum((check) => check.tabs))}</th>
       <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
     </>
   )
 }
 
-export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }: Props) {
+export function EmployeesPanel({
+  employees,
+  reportDate,
+  id = 'employee-report',
+  reconciliation = null,
+}: Props) {
   const [open, setOpen] = useState<string | null>(null)
   const shopId = employees.find((employee) => employee.shopId)?.shopId ?? null
   const dates = employees.flatMap((employee) => employee.days.map((day) => day.date)).sort()
@@ -160,8 +144,11 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
   const activations = employees.reduce((sum, employee) => sum + (employee.activations ?? 0), 0)
   const cash = closing && closing.key === key ? closing.cash : null
   const checks = cash ? employees.map((employee) => checkCash(employee, cash)) : null
-  const differenceTotal = checks ? checks.reduce((sum, check) => sum + check.difference, 0) : 0
-  const shortages = checks ? checks.filter((check) => check.difference <= -0.005).length : 0
+  const differenceTotal = checks ? checks.reduce((sum, check) => sum + (check.difference ?? 0), 0) : 0
+  const shortages = checks
+    ? checks.filter((check) => check.difference !== null && check.difference <= -0.005).length
+    : 0
+  const span = checks && reconciliation !== null ? checkSpan(checks, reconciliation) : null
   // CACO's cash and SPAN first, then any other method; the closing's own columns come after them all.
   const found = [...new Set(employees.flatMap((employee) => Object.keys(employee.byPaymentMethod)))]
   const lead = [CASH_METHOD, SPAN_METHOD].filter((method) => found.includes(method))
@@ -203,15 +190,13 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
           </>
         )}
       </p>
-      {cash && (
-        <p className="muted closing-cash-note">
-          «كاش الإغلاق» و«اسبان الإغلاق» و«تابز الإغلاق» ما سجّله الموظف في إغلاق الشفت بالموقع، و«الفرق» =
-          (كاش الإغلاق + اسبان الإغلاق) − (كاش الكاكو + اسبان الكاكو + تابز الإغلاق): السالب عجز، والموجب
-          فائض. التابز لا يظهر في الكاكو، وكاشه داخل كاش الإغلاق، فيُطرح.
-          لا إغلاق = لم يُسجّل شيء.
-          {cash.unmatched.length > 0 && (
-            <> إغلاقات لم تُطابَق بيوزر: {cash.unmatched.join('، ')}.</>
-          )}
+      {cash && cash.unmatched.length > 0 && (
+        <p className="muted closing-cash-note">إغلاقات لم تُطابَق بيوزر: {cash.unmatched.join('، ')}.</p>
+      )}
+      {span && (
+        <p className={`span-check ${differenceTone(span.difference)}`} data-span-check>
+          الإسبان: التقفيلات {formatMoney(span.closingSpan)} · موازنة مدى {formatMoney(span.reconciliation)} ·{' '}
+          {Math.abs(span.difference) < 0.005 ? 'مطابق' : `الفرق ${formatMoney(span.difference)}`}
         </p>
       )}
 
@@ -226,6 +211,8 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
               {methods.map((method) => (
                 <th key={method}>{METHOD_LABELS[method] ?? method}</th>
               ))}
+              {/* TABS beside CACO's columns, not among the closing's own (the owner's layout). */}
+              {checks && <th>التابز</th>}
               {checks && <ClosingHeads />}
               <th className="no-print"></th>
             </tr>
@@ -245,7 +232,14 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
                   </td>
                 ))}
                 {checks && (
-                  <ClosingCells userId={employee.userId} check={checks[index]} employee={employee} />
+                  <td className="num" data-closing-tabs={employee.userId}>
+                    {checks[index].cash === null || checks[index].tabs === null
+                      ? '—'
+                      : formatMoney(checks[index].tabs ?? 0)}
+                  </td>
+                )}
+                {checks && (
+                  <ClosingCells userId={employee.userId} check={checks[index]} />
                 )}
                 <td className="no-print">
                   <button
@@ -273,6 +267,11 @@ export function EmployeesPanel({ employees, reportDate, id = 'employee-report' }
                   )}
                 </th>
               ))}
+              {checks && (
+                <th className="num">
+                  {formatMoney(checks.reduce((sum, check) => sum + (check.tabs ?? 0), 0))}
+                </th>
+              )}
               {checks && <ClosingTotals checks={checks} />}
               <th className="no-print"></th>
             </tr>
