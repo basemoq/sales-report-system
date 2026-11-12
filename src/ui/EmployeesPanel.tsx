@@ -63,7 +63,6 @@ function ClosingHeads() {
     <>
       <th className="closing-col">كاش الإغلاق</th>
       <th className="closing-col">اسبان الإغلاق</th>
-      <th className="closing-col">تابز الإغلاق</th>
       <th>الفرق</th>
     </>
   )
@@ -78,9 +77,6 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
       </td>
       <td className="num closing-col" data-closing-span={userId}>
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
-      </td>
-      <td className="num closing-col" data-closing-tabs={userId}>
-        {check.cash === null ? '—' : check.tabs === null ? '—' : formatMoney(check.tabs)}
       </td>
       <td className={`num ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId}>
         {check.difference === null ? '—' : formatMoney(check.difference)}
@@ -97,7 +93,6 @@ function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
     <>
       <th className="num closing-col">{formatMoney(sum((check) => check.cash))}</th>
       <th className="num closing-col">{formatMoney(sum((check) => check.span))}</th>
-      <th className="num closing-col">{formatMoney(sum((check) => check.tabs))}</th>
       <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
     </>
   )
@@ -216,6 +211,8 @@ export function EmployeesPanel({
               {methods.map((method) => (
                 <th key={method}>{METHOD_LABELS[method] ?? method}</th>
               ))}
+              {/* TABS beside CACO's columns, not among the closing's own (the owner's layout). */}
+              {checks && <th>التابز</th>}
               {checks && <ClosingHeads />}
               <th className="no-print"></th>
             </tr>
@@ -234,6 +231,13 @@ export function EmployeesPanel({
                     {formatMoney(employee.byPaymentMethod[method] ?? 0)}
                   </td>
                 ))}
+                {checks && (
+                  <td className="num" data-closing-tabs={employee.userId}>
+                    {checks[index].cash === null || checks[index].tabs === null
+                      ? '—'
+                      : formatMoney(checks[index].tabs ?? 0)}
+                  </td>
+                )}
                 {checks && (
                   <ClosingCells userId={employee.userId} check={checks[index]} />
                 )}
@@ -263,6 +267,11 @@ export function EmployeesPanel({
                   )}
                 </th>
               ))}
+              {checks && (
+                <th className="num">
+                  {formatMoney(checks.reduce((sum, check) => sum + (check.tabs ?? 0), 0))}
+                </th>
+              )}
               {checks && <ClosingTotals checks={checks} />}
               <th className="no-print"></th>
             </tr>
