@@ -1819,3 +1819,82 @@ details[open] > summary .collapsible-arrow {
   margin-inline-start: auto;
   font-size: 0.78em;
 }
+
+/*
+ * Employee report on a phone: each employee is a card, not a row that runs off
+ * the side. Screen only — print keeps the table, which is what goes on paper.
+ */
+@media screen and (max-width: 40rem) {
+  .employee-report .table-scroll {
+    overflow: visible;
+    border: 0;
+  }
+
+  .employee-table,
+  .employee-table tbody,
+  .employee-table tfoot {
+    display: block;
+  }
+
+  .employee-table thead {
+    display: none;
+  }
+
+  .employee-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem 0.75rem;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm, 6px);
+    background: transparent;
+  }
+
+  .employee-table tfoot tr {
+    border-color: var(--line-strong);
+  }
+
+  .employee-table td,
+  .employee-table th {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+    background: transparent;
+    text-align: start;
+    font-size: 0.9em;
+  }
+
+  .employee-table td[data-label]::before,
+  .employee-table th[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.85em;
+  }
+
+  .employee-table .employee-name,
+  .employee-table .employee-more {
+    grid-column: 1 / -1;
+  }
+
+  .employee-table .employee-name {
+    font-weight: 700;
+    font-size: 1em;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+  }
+
+  .employee-table .employee-more:empty {
+    display: none;
+  }
+
+  .employee-table .closing-col {
+    background: transparent;
+  }
+}
