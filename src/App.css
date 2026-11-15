@@ -1759,3 +1759,63 @@ details[open] > summary .collapsible-arrow {
   margin-block: 0.5rem;
   font-weight: 600;
 }
+
+/* Saved reports: one compact card each, inside the phone's width. */
+.saved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.saved-item {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  min-width: 0;
+}
+
+.saved-item.is-viewed {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.saved-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.saved-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.saved-figures dt {
+  font-size: 0.78em;
+  color: var(--muted);
+}
+
+.saved-figures dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: start;
+}
+
+.saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+}
+
+.saved-at {
+  margin-inline-start: auto;
+  font-size: 0.78em;
+}
