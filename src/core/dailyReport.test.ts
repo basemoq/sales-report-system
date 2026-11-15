@@ -1018,9 +1018,13 @@ describe('MSAP (app) sales, typed by the supervisor', () => {
     const result = await fillDailyTemplate(shipped, applyManualMsap(base(), 75.25))
     const sheet = await reload(result.bytes)
 
-    expect(sheet.getCell('D11').value).toBe(75.25)
-    expect(sheet.getCell('B13').value).toBe(400)
+    expect(sheet.getCell('D12').value).toBe(75.25)
+    expect(sheet.getCell('B14').value).toBe(400)
     expect(result.warnings.join()).not.toContain('MSAP')
+    // The TABS + BSS total stays the template's formula, with the day's figure stored beside it.
+    const total = sheet.getCell('D11').value as { formula?: string; result?: number }
+    expect(total.formula).toBe('SUM(D5:E10)')
+    expect(total.result).toBe(1000)
   })
 
   it('warns, rather than dropping it silently, when an older template has no MSAP row', async () => {

@@ -38,12 +38,12 @@ describe('the shipped daily template', () => {
     expect(fill('A1')).toBe('FFEBF1DE')
     expect(fill('A2')).toBe('FFB9CDE5')
     expect(fill('A4')).toBe('FFDDD9C3')
-    expect(fill('A12')).toBe('FFFCD5B5')
-    expect(fill('E12')).toBe('FFC6D9F1')
+    expect(fill('A13')).toBe('FFFCD5B5')
+    expect(fill('E13')).toBe('FFC6D9F1')
     expect(sheet.getCell('A2').font?.name).toBe('Cambria')
   })
 
-  it('carries the MSAP row (November 2026) inside the total, and the deposit under it', async () => {
+  it('carries the TABS + BSS total and the MSAP row (November 2026), and the deposit under them', async () => {
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(shipped())
     const sheet = workbook.worksheets[0]
@@ -52,9 +52,12 @@ describe('the shipped daily template', () => {
       return value && typeof value === 'object' && 'formula' in value ? value.formula : undefined
     }
 
-    expect(sheet.getCell('A11').value).toBe('MSAP')
-    expect(sheet.getCell('B11').value).toBe('MSAP Sales')
-    expect(formula('E13')).toBe('SUM(D5:D11)')
-    expect(formula('A13')).toBe('E13-D13-C13-B13')
+    expect(sheet.getCell('A11').value).toBe('TABS + BSS')
+    expect(sheet.getCell('B11').value).toBe('Total')
+    expect(formula('D11')).toBe('SUM(D5:E10)')
+    expect(sheet.getCell('A12').value).toBe('MSAP')
+    expect(sheet.getCell('B12').value).toBe('MSAP Sales')
+    expect(formula('E14')).toBe('D5+D6+D7+D8+D9+D10+D12')
+    expect(formula('A14')).toBe('E14-D14-C14-B14')
   })
 })
