@@ -213,6 +213,7 @@ export function EmployeesPanel({
               ))}
               {/* TABS beside CACO's columns, not among the closing's own (the owner's layout). */}
               {checks && <th>التابز</th>}
+              {checks && <th>MSAP</th>}
               {checks && <ClosingHeads />}
               <th className="no-print"></th>
             </tr>
@@ -236,6 +237,13 @@ export function EmployeesPanel({
                     {checks[index].cash === null || checks[index].tabs === null
                       ? '—'
                       : formatMoney(checks[index].tabs ?? 0)}
+                  </td>
+                )}
+                {checks && (
+                  <td className="num" data-closing-msap={employee.userId}>
+                    {checks[index].cash === null || checks[index].msap === null
+                      ? '—'
+                      : formatMoney(checks[index].msap ?? 0)}
                   </td>
                 )}
                 {checks && (
@@ -270,6 +278,11 @@ export function EmployeesPanel({
               {checks && (
                 <th className="num">
                   {formatMoney(checks.reduce((sum, check) => sum + (check.tabs ?? 0), 0))}
+                </th>
+              )}
+              {checks && (
+                <th className="num">
+                  {formatMoney(checks.reduce((sum, check) => sum + (check.msap ?? 0), 0))}
                 </th>
               )}
               {checks && <ClosingTotals checks={checks} />}

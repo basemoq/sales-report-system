@@ -132,7 +132,7 @@ export function FiguresPanel({
         * working behind them. It still prints, so the report on paper is
         * unchanged.
         */}
-      <Collapsible title="تفاصيل الأنظمة" icon="report" count={systemRows.length + 1}>
+      <Collapsible title="تفاصيل الأنظمة" icon="report" count={systemRows.length + 2}>
       <div className="table-scroll">
         <table className="data-table">
           <thead>
@@ -150,6 +150,14 @@ export function FiguresPanel({
                 <td className="num">{formatMoney(amount)}</td>
               </tr>
             ))}
+            {/* The template's own subtotal row (15 November 2026): TABS + BSS. */}
+            <tr className="subtotal-row">
+              <th>TABS + BSS</th>
+              <th>Total</th>
+              <th className="num">
+                {formatMoney(Math.round(systemRows.reduce((sum, row) => sum + row[2], 0) * 100) / 100)}
+              </th>
+            </tr>
             {/*
               * Sales through the app. No report carries them yet, so the
               * supervisor types the figure; it joins the total and the deposit.

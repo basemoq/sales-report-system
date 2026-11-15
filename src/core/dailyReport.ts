@@ -809,6 +809,23 @@ export async function fillDailyTemplate(
     rememberResult(sheet.getCell(header.row + 1, header.column), value(figures))
   }
 
+  // «TABS + BSS — Total» (template of 15 November 2026) is the template's own
+  // SUM; its figure is stored beside the formula like the two totals above.
+  {
+    const wantedSystem = matchKey('TABS + BSS')
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber <= systemColumn.row) return
+      const system = cellText(row.getCell(systemColumn.column))
+      if (system === null || matchKey(system) !== wantedSystem) return
+      const t = figures.tabs
+      const b = figures.bss
+      rememberResult(
+        sheet.getCell(rowNumber, amountColumn.column),
+        Math.round((t.billPayment + t.ordering + t.cashCollection + b.billPayment + b.ordering + b.cashSales) * 100) / 100,
+      )
+    })
+  }
+
   if (figures.date !== null) {
     const dateLabel = findColumn(sheet, DATE_LABEL)
     if (dateLabel === null) warnings.push('لم يُعثر في القالب على خانة «التاريخ».')
