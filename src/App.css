@@ -1894,7 +1894,8 @@ details[open] > summary .collapsible-arrow {
     display: none;
   }
 
-  .employee-table .closing-col {
+  .data-table.employee-table tbody .closing-col,
+  .data-table.employee-table tfoot .closing-col {
     background: transparent;
   }
 }
