@@ -72,13 +72,13 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
 
   return (
     <>
-      <td className="num closing-col" data-closing-cash={userId}>
+      <td className="num closing-col closing-cash" data-closing-cash={userId} data-label="كاش الإغلاق">
         {check.cash === null ? 'لا إغلاق' : formatMoney(check.cash)}
       </td>
-      <td className="num closing-col" data-closing-span={userId}>
+      <td className="num closing-col closing-span" data-closing-span={userId} data-label="اسبان الإغلاق">
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
       </td>
-      <td className={`num ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId}>
+      <td className={`num employee-diff ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId} data-label="الفرق">
         {check.difference === null ? '—' : formatMoney(check.difference)}
       </td>
     </>
@@ -91,9 +91,9 @@ function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
   const difference = Math.round(sum((check) => check.difference) * 100) / 100
   return (
     <>
-      <th className="num closing-col">{formatMoney(sum((check) => check.cash))}</th>
-      <th className="num closing-col">{formatMoney(sum((check) => check.span))}</th>
-      <th className={`num ${differenceTone(difference)}`}>{formatMoney(difference)}</th>
+      <th className="num closing-col closing-cash" data-label="كاش الإغلاق">{formatMoney(sum((check) => check.cash))}</th>
+      <th className="num closing-col closing-span" data-label="اسبان الإغلاق">{formatMoney(sum((check) => check.span))}</th>
+      <th className={`num employee-diff ${differenceTone(difference)}`} data-label="الفرق">{formatMoney(difference)}</th>
     </>
   )
 }
@@ -201,7 +201,8 @@ export function EmployeesPanel({
       )}
 
       <div className="table-scroll">
-        <table className="data-table">
+        {/* On a phone each row folds into a card (CSS, screen only): the table itself stays for print. */}
+        <table className="data-table employee-table">
           <thead>
             <tr>
               <th>الموظف</th>
@@ -221,26 +222,26 @@ export function EmployeesPanel({
           <tbody>
             {employees.map((employee, index) => (
               <tr key={employee.userId}>
-                <td>{employee.userId}</td>
-                <td className="num">{formatMoney(employee.total)}</td>
-                <td className="num">{formatCount(employee.transactions)}</td>
-                <td className="num">
+                <td className="employee-name">{employee.userId}</td>
+                <td className="num employee-total" data-label="الإجمالي">{formatMoney(employee.total)}</td>
+                <td className="num" data-label="عدد العمليات">{formatCount(employee.transactions)}</td>
+                <td className="num" data-label="تفعيل جديد">
                   {employee.activations === undefined ? '—' : formatCount(employee.activations)}
                 </td>
                 {methods.map((method) => (
-                  <td key={method} className="num">
+                  <td key={method} className="num" data-label={METHOD_LABELS[method] ?? method}>
                     {formatMoney(employee.byPaymentMethod[method] ?? 0)}
                   </td>
                 ))}
                 {checks && (
-                  <td className="num" data-closing-tabs={employee.userId}>
+                  <td className="num" data-closing-tabs={employee.userId} data-label="التابز">
                     {checks[index].cash === null || checks[index].tabs === null
                       ? '—'
                       : formatMoney(checks[index].tabs ?? 0)}
                   </td>
                 )}
                 {checks && (
-                  <td className="num" data-closing-msap={employee.userId}>
+                  <td className="num" data-closing-msap={employee.userId} data-label="MSAP">
                     {checks[index].cash === null || checks[index].msap === null
                       ? '—'
                       : formatMoney(checks[index].msap ?? 0)}
@@ -249,7 +250,7 @@ export function EmployeesPanel({
                 {checks && (
                   <ClosingCells userId={employee.userId} check={checks[index]} />
                 )}
-                <td className="no-print">
+                <td className="no-print employee-more">
                   <button
                     type="button"
                     className="link"
@@ -264,29 +265,29 @@ export function EmployeesPanel({
           </tbody>
           <tfoot>
             <tr>
-              <th>الإجمالي</th>
-              <th className="num">{formatMoney(total)}</th>
-              <th className="num">{formatCount(transactions)}</th>
-              <th className="num">{counted ? formatCount(activations) : '—'}</th>
+              <th className="employee-name">الإجمالي</th>
+              <th className="num employee-total" data-label="الإجمالي">{formatMoney(total)}</th>
+              <th className="num" data-label="عدد العمليات">{formatCount(transactions)}</th>
+              <th className="num" data-label="تفعيل جديد">{counted ? formatCount(activations) : '—'}</th>
               {methods.map((method) => (
-                <th key={method} className="num">
+                <th key={method} className="num" data-label={METHOD_LABELS[method] ?? method}>
                   {formatMoney(
                     employees.reduce((sum, employee) => sum + (employee.byPaymentMethod[method] ?? 0), 0),
                   )}
                 </th>
               ))}
               {checks && (
-                <th className="num">
+                <th className="num" data-label="التابز">
                   {formatMoney(checks.reduce((sum, check) => sum + (check.tabs ?? 0), 0))}
                 </th>
               )}
               {checks && (
-                <th className="num">
+                <th className="num" data-label="MSAP">
                   {formatMoney(checks.reduce((sum, check) => sum + (check.msap ?? 0), 0))}
                 </th>
               )}
               {checks && <ClosingTotals checks={checks} />}
-              <th className="no-print"></th>
+              <th className="no-print employee-more"></th>
             </tr>
           </tfoot>
         </table>
