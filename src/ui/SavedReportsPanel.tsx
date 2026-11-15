@@ -82,80 +82,72 @@ export function SavedReportsPanel({ refreshToken, onDownload, viewing, onView }:
   )
   const isViewed = (report: StoredReport) => report.id === viewing
 
+  /*
+   * One compact card per report, not a table row: on a phone the table ran off
+   * the side, and «عرض» and «حذف» sat past the scroll. Day and branch, the two
+   * figures, then the actions — all inside the screen's width. The showroom
+   * name is left out: it is the same on every row of a branch's own list.
+   */
   const rows = (list: readonly StoredReport[]) => (
-    <div className="table-scroll" data-saved-week>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>اليوم</th>
-                <th>المعرض</th>
-                <th>الفرع</th>
-                <th>إجمالى المبيعات</th>
-                <th>الإيداع النقدي</th>
-                <th>حُفظ في</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((report) => {
-                const saved = reviveSavedReport(report.data)
-                return (
-                  <tr key={report.id}>
-                    <td>{saved?.reportDate || report.id}</td>
-                    <td>{saved?.identity.showroom || '—'}</td>
-                    <td>{saved?.shopId || '—'}</td>
-                    <td className="num">
-                      {saved ? formatMoney(saved.figures.totalSales) : '—'}
-                    </td>
-                    {/* Reports saved before the deposit was kept show a dash, not a zero. */}
-                    <td className="num">
-                      {typeof saved?.figures.cashDeposit === 'number'
-                        ? formatMoney(saved.figures.cashDeposit)
-                        : '—'}
-                    </td>
-                    <td>{report.createdAt.slice(0, 10)}</td>
-                    <td>
-                      <div className="row-actions">
-                        {saved && (
-                          <button
-                            type="button"
-                            className="link"
-                            onClick={() => view(report)}
-                            aria-expanded={viewing === report.id}
-                            data-saved-view={report.id}
-                          >
-                            {viewing === report.id ? 'إخفاء' : 'عرض'}
-                          </button>
-                        )}
-                        <button type="button" className="link" onClick={() => redownload(report)}>
-                          تنزيل القالب
-                        </button>
-                        {confirming === report.id ? (
-                          <>
-                            <button type="button" className="link danger" onClick={() => remove(report.id)}>
-                              تأكيد الحذف
-                            </button>
-                            <button type="button" className="link" onClick={() => setConfirming(null)}>
-                              إلغاء
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            className="link"
-                            onClick={() => setConfirming(report.id)}
-                          >
-                            حذف
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+    <ul className="saved-list" data-saved-week>
+      {list.map((report) => {
+        const saved = reviveSavedReport(report.data)
+        return (
+          <li key={report.id} className={viewing === report.id ? 'saved-item is-viewed' : 'saved-item'}>
+            <div className="saved-head">
+              <strong>{saved?.reportDate || report.id}</strong>
+              <span className="muted">{saved?.shopId || '—'}</span>
+            </div>
+            <dl className="saved-figures">
+              <div>
+                <dt>إجمالى المبيعات</dt>
+                <dd className="num">{saved ? formatMoney(saved.figures.totalSales) : '—'}</dd>
+              </div>
+              <div>
+                <dt>الإيداع النقدي</dt>
+                {/* Reports saved before the deposit was kept show a dash, not a zero. */}
+                <dd className="num">
+                  {typeof saved?.figures.cashDeposit === 'number'
+                    ? formatMoney(saved.figures.cashDeposit)
+                    : '—'}
+                </dd>
+              </div>
+            </dl>
+            <div className="row-actions saved-actions">
+              {saved && (
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => view(report)}
+                  aria-expanded={viewing === report.id}
+                  data-saved-view={report.id}
+                >
+                  {viewing === report.id ? 'إخفاء' : 'عرض'}
+                </button>
+              )}
+              <button type="button" className="link" onClick={() => redownload(report)}>
+                تنزيل القالب
+              </button>
+              {confirming === report.id ? (
+                <>
+                  <button type="button" className="link danger" onClick={() => remove(report.id)}>
+                    تأكيد الحذف
+                  </button>
+                  <button type="button" className="link" onClick={() => setConfirming(null)}>
+                    إلغاء
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="link" onClick={() => setConfirming(report.id)}>
+                  حذف
+                </button>
+              )}
+              <span className="muted saved-at">حُفظ {report.createdAt.slice(0, 10)}</span>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
   )
 
   if (reports.length === 0) {
