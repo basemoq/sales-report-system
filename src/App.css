@@ -1823,6 +1823,11 @@ details[open] > summary .collapsible-arrow {
 /*
  * Employee report on a phone: each employee is a card, not a row that runs off
  * the side. Screen only — print keeps the table, which is what goes on paper.
+ *
+ * Inside a card every figure is a small tile, its label above it: the name and
+ * the total lead, CACO's figures sit plain, what the employee recorded at
+ * closing is shaded (as its columns are in the table), and the difference
+ * closes the card as a band in its own colour — green, amber or red.
  */
 @media screen and (max-width: 40rem) {
   .employee-report .table-scroll {
@@ -1843,30 +1848,34 @@ details[open] > summary .collapsible-arrow {
   .employee-table tr {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.35rem 0.75rem;
-    padding: 0.65rem 0.75rem;
-    margin-bottom: 0.5rem;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
     border: 1px solid var(--line);
-    border-radius: var(--radius-sm, 6px);
-    background: transparent;
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--line-strong) 35%, transparent);
   }
 
   .employee-table tfoot tr {
-    border-color: var(--line-strong);
+    border: 2px solid var(--brand);
   }
 
   .employee-table td,
   .employee-table th {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0;
-    border: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
     min-width: 0;
     background: transparent;
     text-align: start;
-    font-size: 0.9em;
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
 
   .employee-table td[data-label]::before,
@@ -1874,28 +1883,83 @@ details[open] > summary .collapsible-arrow {
     content: attr(data-label);
     color: var(--muted);
     font-weight: 400;
-    font-size: 0.85em;
+    font-size: 0.72rem;
   }
 
   .employee-table .employee-name,
-  .employee-table .employee-more {
+  .employee-table .employee-more,
+  .employee-table .employee-total,
+  .employee-table .employee-diff {
     grid-column: 1 / -1;
   }
 
   .employee-table .employee-name {
+    border: 0;
+    padding: 0 0.15rem;
     font-weight: 700;
-    font-size: 1em;
-    padding-bottom: 0.25rem;
-    border-bottom: 1px solid var(--line);
+    font-size: 1.05rem;
     overflow-wrap: anywhere;
+  }
+
+  /* The total: the card's headline figure. */
+  .employee-table .employee-total {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    border: 0;
+    background: var(--brand-soft);
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .employee-table .employee-total::before {
+    font-size: 0.8rem !important;
+  }
+
+  /* What the employee recorded at closing: shaded, like its columns in the table. */
+  .data-table.employee-table tbody .closing-col,
+  .data-table.employee-table tfoot .closing-col {
+    border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+    background: color-mix(in srgb, var(--ok) 13%, transparent);
+  }
+
+  /* The difference: a band across the card, in the colour of its reading. */
+  .employee-table .employee-diff {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    border: 0;
+    font-size: 1.15rem;
+    background: var(--line);
+  }
+
+  .employee-table .employee-diff::before {
+    font-size: 0.8rem !important;
+    color: inherit !important;
+    font-weight: 600 !important;
+  }
+
+  .employee-table .employee-diff.cash-ok {
+    background: var(--ok-soft);
+  }
+
+  .employee-table .employee-diff.cash-over {
+    background: var(--warn-soft);
+  }
+
+  .employee-table .employee-diff.cash-short {
+    background: var(--danger-soft);
+  }
+
+  .employee-table .employee-more {
+    border: 0;
+    padding: 0.1rem 0.15rem 0;
+    align-items: flex-end;
+    font-size: 0.9rem;
+    font-weight: 400;
   }
 
   .employee-table .employee-more:empty {
     display: none;
-  }
-
-  .data-table.employee-table tbody .closing-col,
-  .data-table.employee-table tfoot .closing-col {
-    background: transparent;
   }
 }

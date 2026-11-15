@@ -78,7 +78,7 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
       <td className="num closing-col" data-closing-span={userId} data-label="اسبان الإغلاق">
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
       </td>
-      <td className={`num ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId} data-label="الفرق">
+      <td className={`num employee-diff ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId} data-label="الفرق">
         {check.difference === null ? '—' : formatMoney(check.difference)}
       </td>
     </>
@@ -93,7 +93,7 @@ function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
     <>
       <th className="num closing-col" data-label="كاش الإغلاق">{formatMoney(sum((check) => check.cash))}</th>
       <th className="num closing-col" data-label="اسبان الإغلاق">{formatMoney(sum((check) => check.span))}</th>
-      <th className={`num ${differenceTone(difference)}`} data-label="الفرق">{formatMoney(difference)}</th>
+      <th className={`num employee-diff ${differenceTone(difference)}`} data-label="الفرق">{formatMoney(difference)}</th>
     </>
   )
 }
@@ -223,7 +223,7 @@ export function EmployeesPanel({
             {employees.map((employee, index) => (
               <tr key={employee.userId}>
                 <td className="employee-name">{employee.userId}</td>
-                <td className="num" data-label="الإجمالي">{formatMoney(employee.total)}</td>
+                <td className="num employee-total" data-label="الإجمالي">{formatMoney(employee.total)}</td>
                 <td className="num" data-label="عدد العمليات">{formatCount(employee.transactions)}</td>
                 <td className="num" data-label="تفعيل جديد">
                   {employee.activations === undefined ? '—' : formatCount(employee.activations)}
@@ -266,7 +266,7 @@ export function EmployeesPanel({
           <tfoot>
             <tr>
               <th className="employee-name">الإجمالي</th>
-              <th className="num" data-label="الإجمالي">{formatMoney(total)}</th>
+              <th className="num employee-total" data-label="الإجمالي">{formatMoney(total)}</th>
               <th className="num" data-label="عدد العمليات">{formatCount(transactions)}</th>
               <th className="num" data-label="تفعيل جديد">{counted ? formatCount(activations) : '—'}</th>
               {methods.map((method) => (
