@@ -208,7 +208,7 @@ export function SavedReportsPanel({ refreshToken, onDownload, viewing, onView }:
           {month.weeks.map((week, weekIndex) => (
             <Collapsible
               key={week.week}
-              title={`الأسبوع ${week.week} · ${week.from}–${week.to}`}
+              title={`الأسبوع ${week.week} · من ${week.from} إلى ${week.to}`}
               count={week.items.length}
               open={(monthIndex === 0 && weekIndex === 0) || week.items.some(isViewed)}
             >
