@@ -1923,6 +1923,37 @@ details[open] > summary .collapsible-arrow {
     background: color-mix(in srgb, var(--ok) 13%, transparent);
   }
 
+  /*
+   * The two are checked one after the other, cash first: so the closing cash is
+   * the strongest tile on the card (solid green, larger figure) and the closing
+   * SPAN is plainly a different thing (blue), not a twin beside it.
+   */
+  .data-table.employee-table tbody .closing-cash,
+  .data-table.employee-table tfoot .closing-cash {
+    border: 2px solid var(--ok);
+    background: color-mix(in srgb, var(--ok) 22%, transparent);
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+
+  .employee-table .closing-cash::before {
+    color: var(--ok) !important;
+    font-weight: 700 !important;
+  }
+
+  .data-table.employee-table tbody .closing-span,
+  .data-table.employee-table tfoot .closing-span {
+    border: 2px solid color-mix(in srgb, var(--brand) 55%, transparent);
+    background: color-mix(in srgb, var(--brand) 12%, transparent);
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+
+  .employee-table .closing-span::before {
+    color: var(--brand) !important;
+    font-weight: 700 !important;
+  }
+
   /* The difference: a band across the card, in the colour of its reading. */
   .employee-table .employee-diff {
     flex-direction: row;

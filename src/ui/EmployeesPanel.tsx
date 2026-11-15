@@ -72,10 +72,10 @@ function ClosingCells({ userId, check }: { userId: string; check: CashCheck }) {
 
   return (
     <>
-      <td className="num closing-col" data-closing-cash={userId} data-label="كاش الإغلاق">
+      <td className="num closing-col closing-cash" data-closing-cash={userId} data-label="كاش الإغلاق">
         {check.cash === null ? 'لا إغلاق' : formatMoney(check.cash)}
       </td>
-      <td className="num closing-col" data-closing-span={userId} data-label="اسبان الإغلاق">
+      <td className="num closing-col closing-span" data-closing-span={userId} data-label="اسبان الإغلاق">
         {check.cash === null ? '—' : check.span === null ? '—' : formatMoney(check.span)}
       </td>
       <td className={`num employee-diff ${check.difference === null ? '' : differenceTone(check.difference)}`} data-cash-diff={userId} data-label="الفرق">
@@ -91,8 +91,8 @@ function ClosingTotals({ checks }: { checks: readonly CashCheck[] }) {
   const difference = Math.round(sum((check) => check.difference) * 100) / 100
   return (
     <>
-      <th className="num closing-col" data-label="كاش الإغلاق">{formatMoney(sum((check) => check.cash))}</th>
-      <th className="num closing-col" data-label="اسبان الإغلاق">{formatMoney(sum((check) => check.span))}</th>
+      <th className="num closing-col closing-cash" data-label="كاش الإغلاق">{formatMoney(sum((check) => check.cash))}</th>
+      <th className="num closing-col closing-span" data-label="اسبان الإغلاق">{formatMoney(sum((check) => check.span))}</th>
       <th className={`num employee-diff ${differenceTone(difference)}`} data-label="الفرق">{formatMoney(difference)}</th>
     </>
   )
