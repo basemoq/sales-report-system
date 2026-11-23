@@ -22,10 +22,11 @@ describe('the stock sheet', () => {
     const layout = await readStockLayout(shipped())
 
     expect(layout.shopColumn).toBe(1)
-    expect(layout.commentsColumn).toBe(16)
+    expect(layout.commentsColumn).toBe(19)
     expect(layout.devices.map((device) => device.label)).toEqual([
       'BSS- Router', 'Gaming Router', 'Router Black', 'Mesh Black', 'MI FI', 'Mesh',
       'IPHONE 17 PRO MAX', 'IPHONE 17 PRO', 'IPHONE 17',
+      'IPHONE 18 PRO MAX', 'IPHONE 18 PRO', 'IPHONE 18',
       'SAMSUNG S26 ULTRA 256GB', 'SAMSUNG S26 plus 256GB', 'SAMSUNG S26 256GB',
       'SAM A36', 'SAM A56',
     ])
@@ -33,7 +34,7 @@ describe('the stock sheet', () => {
 
   it('ships blank: no shop and no count in the data row', async () => {
     const sheet = await reload(shipped())
-    for (let column = 1; column <= 16; column++) {
+    for (let column = 1; column <= 19; column++) {
       expect(sheet.getCell(2, column).value ?? null).toBeNull()
     }
   })
@@ -55,7 +56,39 @@ describe('the stock sheet', () => {
     // A typed zero is a count; an untouched device stays empty.
     expect(sheet.getCell('E2').value).toBe(0)
     expect(sheet.getCell('D2').value ?? null).toBeNull()
-    expect(sheet.getCell('P2').value).toBe('راوتر تالف واحد')
+    expect(sheet.getCell('S2').value).toBe('راوتر تالف واحد')
+  })
+
+  it('counts the iPhone 18 beside the 17, which stays', async () => {
+    const layout = await readStockLayout(shipped())
+    const header = (label: string) => layout.devices.find((device) => device.label === label)!.header
+    const { bytes, counted } = await fillStockTemplate(shipped(), {
+      shopId: 'WFW430',
+      counts: {
+        [header('IPHONE 17 PRO MAX')]: 4,
+        [header('IPHONE 18 PRO MAX')]: 2,
+        [header('IPHONE 18 PRO')]: 3,
+        [header('IPHONE 18')]: 5,
+        [header('SAM A56')]: 7,
+      },
+      comments: '',
+    })
+    const sheet = await reload(bytes)
+
+    expect(counted).toBe(5)
+    // The 17 is where it was; the 18 follows it; the Samsungs moved right by three.
+    expect([sheet.getCell('H2').value, sheet.getCell('K2').value, sheet.getCell('L2').value, sheet.getCell('M2').value])
+      .toEqual([4, 2, 3, 5])
+    expect(sheet.getCell('R2').value).toBe(7)
+    expect(sheet.getCell('R1').value).toBe('SAM A56')
+  })
+
+  it('gives the 18 the 17’s look: the same header fill and column widths', async () => {
+    const sheet = await reload(shipped())
+    for (const [eighteen, seventeen] of [[11, 8], [12, 9], [13, 10]]) {
+      expect(sheet.getCell(1, eighteen).fill).toEqual(sheet.getCell(1, seventeen).fill)
+      expect(sheet.getColumn(eighteen).width).toBe(sheet.getColumn(seventeen).width)
+    }
   })
 
   it('keeps the sheet as the region lays it out: headers, colours and widths', async () => {
@@ -63,7 +96,7 @@ describe('the stock sheet', () => {
     const before = await reload(shipped())
     const after = await reload(bytes)
 
-    for (let column = 1; column <= 16; column++) {
+    for (let column = 1; column <= 19; column++) {
       expect(after.getCell(1, column).value).toEqual(before.getCell(1, column).value)
       expect(after.getCell(1, column).fill).toEqual(before.getCell(1, column).fill)
       expect(after.getColumn(column).width).toBe(before.getColumn(column).width)
